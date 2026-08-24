@@ -1,0 +1,131 @@
+import type { PeriodType, RouteState, Scope } from "./types";
+
+const periods = new Set<PeriodType>(["daily", "weekly", "monthly"]);
+
+function datePartsInTokyo(now: Date): {
+  year: number;
+  month: number;
+  day: number;
+} {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value);
+  return { year: get("year"), month: get("month"), day: get("day") };
+}
+
+function pad(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+function dateKey(year: number, month: number, day: number): string {
+  return `${String(year)}-${pad(month)}-${pad(day)}`;
+}
+
+export function periodKeyForDate(type: PeriodType, value: string): string {
+  const normalized = /^\d{4}-\d{2}$/.test(value) ? `${value}-01` : value;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalized);
+  if (!match) return currentPeriodKey(type);
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (type === "monthly") return `${String(year)}-${pad(month)}`;
+  if (type === "daily") return dateKey(year, month, day);
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() - date.getUTCDay());
+  return dateKey(
+    date.getUTCFullYear(),
+    date.getUTCMonth() + 1,
+    date.getUTCDate(),
+  );
+}
+
+export function currentPeriodKey(type: PeriodType, now = new Date()): string {
+  const { year, month, day } = datePartsInTokyo(now);
+  return periodKeyForDate(type, dateKey(year, month, day));
+}
+
+function baseDate(route: RouteState): string {
+  return route.period === "monthly" ? `${route.key}-01` : route.key;
+}
+
+export function buildPath(
+  route: RouteState,
+  overrides: Partial<
+    Pick<RouteState, "scope" | "period" | "key" | "repository" | "cursor">
+  > = {},
+): string {
+  const scope = overrides.scope ?? route.scope;
+  const period = overrides.period ?? route.period;
+  const repository =
+    overrides.repository === undefined
+      ? route.repository
+      : overrides.repository;
+  const key =
+    overrides.key ??
+    (period === route.period
+      ? route.key
+      : periodKeyForDate(period, baseDate(route)));
+  const prefix = scope === "all" ? "/all" : "";
+  const repositoryPart = repository
+    ? `/repo/${encodeURIComponent(repository)}`
+    : "";
+  const path = `${prefix}${repositoryPart}/${period}/${key}`;
+  const cursor = overrides.cursor === undefined ? null : overrides.cursor;
+  return cursor ? `${path}?cursor=${encodeURIComponent(cursor)}` : path;
+}
+
+function decodeRepository(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+
+export function parseRoute(location: Location): RouteState {
+  const parts = location.pathname.split("/").filter(Boolean);
+  let index = 0;
+  const scope: Scope = parts[0] === "all" ? "all" : "public";
+  if (scope === "all") index += 1;
+  if (parts[index] === "public") index += 1;
+
+  let repository: string | null = null;
+  if (parts[index] === "repo" && parts[index + 1]) {
+    repository = decodeRepository(parts[index + 1] ?? "");
+    index += 2;
+  }
+
+  const candidatePeriod = parts[index] as PeriodType | undefined;
+  const period =
+    candidatePeriod && periods.has(candidatePeriod) ? candidatePeriod : "daily";
+  const candidateKey = parts[index + 1];
+  const validKey =
+    period === "monthly"
+      ? /^\d{4}-\d{2}$/.test(candidateKey ?? "")
+      : /^\d{4}-\d{2}-\d{2}$/.test(candidateKey ?? "");
+  const key = validKey
+    ? (candidateKey ?? currentPeriodKey(period))
+    : currentPeriodKey(period);
+  const route = {
+    scope,
+    period,
+    key: periodKeyForDate(period, key),
+    repository,
+    cursor: new URLSearchParams(location.search).get("cursor"),
+  } satisfies RouteState;
+
+  if (!candidatePeriod || !candidateKey || !validKey) {
+    window.history.replaceState(null, "", buildPath(route));
+  }
+  return route;
+}
+
+export function isFuturePeriod(type: PeriodType, key: string): boolean {
+  return key >= currentPeriodKey(type);
+}

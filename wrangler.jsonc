@@ -1,0 +1,132 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "changes",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-08-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/all", "/all/*"],
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "changes-production",
+      "database_id": "386a1e8d-e73e-433a-967b-0ef88312df64",
+      "migrations_dir": "./migrations",
+    },
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "JOBS",
+        "queue": "changes-jobs",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "changes-jobs",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "changes-jobs-dlq",
+      },
+    ],
+  },
+  "ai": {
+    "binding": "AI",
+    "remote": true,
+  },
+  "triggers": {
+    "crons": ["*/30 * * * *"],
+  },
+  "vars": {
+    "APP_ORIGIN": "https://changes.wayaga.org",
+    "GITHUB_OWNER": "onishi",
+  },
+  "secrets": {
+    "required": [
+      "GITHUB_CLIENT_ID",
+      "GITHUB_CLIENT_SECRET",
+      "GITHUB_APP_ID",
+      "GITHUB_INSTALLATION_ID",
+      "GITHUB_APP_PRIVATE_KEY",
+      "ALLOWED_GITHUB_USER_ID",
+      "SESSION_SECRET",
+    ],
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "head_sampling_rate": 1,
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.05,
+    },
+  },
+  "env": {
+    "production": {
+      "name": "changes-production",
+      "assets": {
+        "binding": "ASSETS",
+        "not_found_handling": "single-page-application",
+        "run_worker_first": ["/api/*", "/all", "/all/*"],
+      },
+      "routes": [
+        {
+          "pattern": "changes.wayaga.org",
+          "custom_domain": true,
+        },
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "changes-production",
+          "database_id": "386a1e8d-e73e-433a-967b-0ef88312df64",
+          "migrations_dir": "./migrations",
+        },
+      ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "JOBS",
+            "queue": "changes-jobs",
+          },
+        ],
+        "consumers": [
+          {
+            "queue": "changes-jobs",
+            "max_batch_size": 10,
+            "max_batch_timeout": 5,
+            "max_retries": 3,
+            "dead_letter_queue": "changes-jobs-dlq",
+          },
+        ],
+      },
+      "ai": {
+        "binding": "AI",
+        "remote": true,
+      },
+      "triggers": {
+        "crons": ["*/30 * * * *"],
+      },
+      "vars": {
+        "APP_ORIGIN": "https://changes.wayaga.org",
+        "GITHUB_OWNER": "onishi",
+      },
+      "secrets": {
+        "required": [
+          "GITHUB_CLIENT_ID",
+          "GITHUB_CLIENT_SECRET",
+          "GITHUB_APP_ID",
+          "GITHUB_INSTALLATION_ID",
+          "GITHUB_APP_PRIVATE_KEY",
+          "ALLOWED_GITHUB_USER_ID",
+          "SESSION_SECRET",
+        ],
+      },
+    },
+  },
+}

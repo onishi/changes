@@ -25,16 +25,28 @@
 
 preview と production の Worker、D1、Queue、Secrets は分離します。AI provider と GitHub client はアプリ本体から interface で分離します。
 
+## 現在の進捗（2026-08-21）
+
+- React + Hono + Cloudflare Workers Static Assets のアプリ基盤を実装済み
+- D1 migration、GitHub App 同期、日・週・月の変更レコード集約、public / all API を実装済み
+- GitHub OAuth + 数値 user ID allowlist、HMAC 化した session、server-side guard を実装済み
+- Workers AI の JSON Mode サマリと Queue retry / dead-letter Queue を実装済み
+- 日付別 / リポジトリ別 UI、期間ページャ、50件 cursor、GitHub 期間ログリンクを実装済み
+- Workers runtime 上の unit / integration test 14件と GitHub Actions CI を追加済み
+- Cloudflare 本番 D1 `changes-production`、Queue `changes-jobs`、DLQ `changes-jobs-dlq` を作成し、初期 migration を適用済み
+- production dry-run で Worker、Static Assets、D1、Queues、Workers AI、Cron の bindings を確認済み
+- 本番デプロイ前の残件は GitHub App の作成と Secrets 登録、実データ同期・AI 品質確認（初回 deploy は必須 Secrets 不足で安全に停止済み）
+
 ## マイルストーン
 
 ### Phase 0: 技術選定とデータ境界の検証
 
 目的: 実装前に GitHub から必要なデータを安全かつ現実的な API コストで取得できることを確認する。
 
-- [ ] 対象とする単一 GitHub owner、default branch、同期対象外条件を確定する
-- [ ] GitHub App と OAuth App を比較し、ログインとデータ取得方式を決める
+- [x] 対象とする単一 GitHub owner、default branch、同期対象外条件を確定する
+- [x] 1つの GitHub App を installation token と user authorization の両方に使う方式を決める
 - [ ] public/private を含むテスト用リポジトリで必要権限を検証する
-- [ ] REST / GraphQL API で repository、commit、author、visibility を取得する spike を作る
+- [x] REST API で repository、commit、author、visibility を取得する client を作る
 - [ ] rate limit と初回同期時間を計測する
 - [ ] `wayaga.org` が対象 Cloudflare account の active zone であることを確認する
 - [ ] `changes.wayaga.org` に競合する DNS record、Custom Domain、Worker route がないことを確認する
@@ -55,20 +67,20 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 
 目的: deploy 可能な最小構成と、継続的に品質を確認できる基盤を用意する。
 
-- [ ] TypeScript project、formatter、linter、typecheck をセットアップする
-- [ ] Cloudflare Workers 対応の React project と Workers Static Assets をセットアップする
+- [x] TypeScript project、formatter、linter、typecheck をセットアップする
+- [x] Cloudflare Workers 対応の React project と Workers Static Assets をセットアップする
 - [ ] `wrangler.jsonc` に production / preview の bindings と環境差分を定義する
-- [ ] 環境変数の schema validation と `.env.example` を用意する
+- [x] 環境変数の schema validation と `.dev.vars.example` を用意する
 - [ ] production / preview 用 D1 database と migration 手順を用意する
 - [ ] production / preview 用 Queue と dead-letter queue を用意する
-- [ ] Cron Trigger の `scheduled()` handler とローカル実行手順を用意する
-- [ ] Queue の producer / consumer handler とローカル実行手順を用意する
-- [ ] GitHub、OAuth、AI、Webhook、session の必須 secret 名を定義する
-- [ ] `wrangler types` で binding の TypeScript 型を生成する
-- [ ] test runner と CI をセットアップする
+- [x] Cron Trigger の `scheduled()` handler を用意する
+- [x] Queue の producer / consumer handler を用意する
+- [x] GitHub App user authorization、installation、session の必須 secret 名を定義する
+- [x] `wrangler types` で binding の TypeScript 型を生成する
+- [x] test runner と CI をセットアップする
 - [ ] Workers Builds または GitHub Actions + Wrangler で preview / production pipeline を用意する
-- [ ] health check、構造化ログ、エラー追跡の基盤を追加する
-- [ ] private 値をログから除外する redaction rule を設定する
+- [x] health check、構造化ログ、Workers Observability の基盤を追加する
+- [x] ログを event / ID / status 中心に限定し、token・secret・本文を出力しない
 
 完了条件:
 
@@ -80,14 +92,14 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 
 目的: private データを扱う前に public / all のアクセス境界を完成させる。
 
-- [ ] GitHub sign-in / sign-out を実装する
-- [ ] 許可する GitHub user ID の allowlist を実装する
-- [ ] `/all` と `/api/all/*` に server-side guard を追加する
-- [ ] 未認証・未許可・期限切れの挙動を定義する
-- [ ] all ページへ `noindex` と `private, no-store` を設定する
-- [ ] public / all 用 repository を分離した data-access interface を作る
-- [ ] private repository を指定した public URL が `404` になることをテストする
-- [ ] public HTML/API/log/analytics/cache に private の識別情報がないことをテストする
+- [x] GitHub sign-in / sign-out を実装する
+- [x] 許可する GitHub user ID の allowlist を実装する
+- [x] `/all` と `/api/all/*` に server-side guard を追加する
+- [x] 未認証・未許可・期限切れの挙動を定義する
+- [x] all ページへ `noindex` と `private, no-store` を設定する
+- [x] public / all 用 query と変更レコードを scope で分離する
+- [x] private repository を指定した public URL が `404` になることをテストする
+- [x] public API に private の識別情報がないことを integration test で検証する
 
 完了条件:
 
@@ -99,15 +111,15 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 
 目的: GitHub のコミット履歴を再現可能かつ差分更新可能な形で保存する。
 
-- [ ] `repositories`、`commits`、`change_records`、`sync_runs` の migration を作る
-- [ ] GitHub client と rate-limit handling を実装する
-- [ ] リポジトリ一覧の同期を実装する
-- [ ] default branch のコミット初回同期を実装する
-- [ ] repository ID + commit OID による upsert / deduplication を実装する
-- [ ] 差分同期と overlap window を実装する
-- [ ] visibility 変更、rename、archive、削除を反映する
-- [ ] retry/backoff と失敗した同期の再開を実装する
-- [ ] 定期ジョブを設定する
+- [x] `repositories`、`commits`、`change_records`、`sync_runs` の migration を作る
+- [x] GitHub client と rate-limit handling を実装する
+- [x] リポジトリ一覧の同期を実装する
+- [x] default branch のコミット初回同期を実装する
+- [x] repository ID + commit OID による upsert / deduplication を実装する
+- [x] 差分同期と overlap window を実装する
+- [x] visibility 変更、rename、archive、削除を repository metadata と query に反映する
+- [x] Queue retry/backoff と dead-letter Queue を実装する
+- [x] 30分間隔の Cron Trigger を設定する
 - [ ] 必要であれば GitHub Webhook と署名検証を追加する
 - [ ] 最終成功時刻、同期状態、rate-limit を運用画面またはログで確認可能にする
 
@@ -121,17 +133,17 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 
 目的: UI に依存せず、期間別・リポジトリ別に安定したデータを取得できるようにする。
 
-- [ ] daily / weekly / monthly の期間計算 utility を実装する
-- [ ] `Asia/Tokyo` と UTC の境界値テストを追加する
-- [ ] 期間種別 × 対象期間 × repository ごとにコミットを1変更レコードへ集約する
-- [ ] 同じリポジトリ・期間の複数コミットを重複なく関連付ける
-- [ ] 期間境界を UTC の `since` / `until` に変換し、owner と期間で絞った GitHub コミットログ URL を生成する
-- [ ] public / all の期間 API を実装する
-- [ ] public / all のリポジトリ一覧 API を実装する
-- [ ] リポジトリ別期間 API を実装する
-- [ ] 変更レコード単位の安定した cursor pagination を実装する
-- [ ] 不正な日付、未来の日付、不正な cursor の validation を実装する
-- [ ] 単一 owner 配下での repository rename 後の URL/slug の扱いを実装する
+- [x] daily / weekly / monthly の期間計算 utility を実装する
+- [x] `Asia/Tokyo` と UTC の境界値テストを追加する
+- [x] 期間種別 × 対象期間 × repository ごとにコミットを1変更レコードへ集約する
+- [x] 同じリポジトリ・期間の複数コミットを重複なく関連付ける
+- [x] 期間境界を UTC の `since` / `until` に変換し、owner と期間で絞った GitHub コミットログ URL を生成する
+- [x] public / all の期間 API を実装する
+- [x] public / all のリポジトリ一覧 API を実装する
+- [x] リポジトリ別期間 API を実装する
+- [x] 変更レコード単位の安定した cursor pagination を実装する
+- [x] 不正な日付、未来の日付、不正な cursor の validation を実装する
+- [x] repository alias を保存し、rename 前の URL を canonical name へ置き換える
 - [ ] API response schema とエラー形式を固定する
 
 完了条件:
@@ -147,18 +159,18 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 
 目的: 日付とリポジトリの2つの軸で活動を快適に閲覧できるようにする。
 
-- [ ] 共通レイアウトとレスポンシブ navigation を作る
-- [ ] Public / All のモード表示と切り替えを作る
-- [ ] Daily / Weekly / Monthly の切り替えを作る
-- [ ] 日付 picker と repository selector を作る
-- [ ] 期間ページの stats と repository ごとの変更レコード一覧を作る
-- [ ] 変更レコード内に AI summary、commit count、元 commit list を表示する
-- [ ] 各変更レコードに「GitHub でコミットログを見る」外部リンクを表示する
-- [ ] repository ページを作る
-- [ ] 前後期間ページャを作る
-- [ ] 変更レコードの cursor pager を作る
-- [ ] loading / empty / stale / error / unauthorized 状態を作る
-- [ ] GitHub commit / repository への外部リンクを追加する
+- [x] 共通レイアウトとレスポンシブ navigation を作る
+- [x] Public / All のモード表示と切り替えを作る
+- [x] Daily / Weekly / Monthly の切り替えを作る
+- [x] 日付 picker と repository selector を作る
+- [x] 期間ページの stats と repository ごとの変更レコード一覧を作る
+- [x] 変更レコード内に AI summary、commit count、元 commit list を表示する
+- [x] 各変更レコードに「GitHub でコミットログを見る」外部リンクを表示する
+- [x] repository ページを作る
+- [x] 前後期間ページャを作る
+- [x] 変更レコードの cursor pager を作る
+- [x] loading / empty / stale / syncing / error / unauthorized 状態を作る
+- [x] GitHub commit / repository への外部リンクを追加する
 - [ ] keyboard、focus、screen reader、contrast を確認する
 - [ ] mobile / desktop の browser E2E を追加する
 
@@ -173,17 +185,17 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 
 目的: private 境界を維持したまま、コミット群を読みやすい changelog に変換する。
 
-- [ ] `change_records` の summary fields と source fingerprint を実装する
-- [ ] AI provider adapter と structured output schema を作る
-- [ ] public / all で入力を構築する処理を完全に分離する
-- [ ] 期間種別 × repository の変更レコード要約 prompt を version 管理する
+- [x] `change_records` の summary fields と source fingerprint を実装する
+- [x] Workers AI JSON Mode と Zod の structured output schema を作る
+- [x] public / all で別の change record ID と fingerprint を使用する
+- [x] 期間種別 × repository の変更レコード要約 prompt を version 管理する
 - [ ] 長い期間を chunk → reduce する処理を実装する
-- [ ] commit 集合が変わった daily / weekly / monthly の変更レコードだけ invalidation する
-- [ ] 非同期生成、進行状態、retry/backoff を実装する
+- [x] commit 集合が変わった daily / weekly / monthly の変更レコードだけ invalidation する
+- [x] Queue による非同期生成、進行状態、retry/backoff を実装する
 - [ ] rate limit、token budget、月次コスト上限を設定する
-- [ ] prompt injection を想定し、commit message を命令ではなくデータとして扱う
+- [x] prompt injection を想定し、commit message を命令ではなくデータとして扱う
 - [ ] hallucination、private 混入、空期間、日本語品質の fixture test を追加する
-- [ ] provider 障害時の fallback UI を実装する
+- [x] provider 障害時の fallback UI を実装する
 
 完了条件:
 
@@ -282,15 +294,15 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 
 ## 主なリスクと対策
 
-| リスク | 対策 |
-| --- | --- |
-| private 情報が public に混ざる | data-access 層、要約、cache namespace を scope ごとに分離し、canary private fixture で自動検査する |
-| GitHub API rate limit | 差分同期、ETag/conditional request、backoff、最終成功データの継続表示を行う |
-| force-push や visibility 変更でデータが古くなる | overlap を持つ定期再同期と、定期的な repository metadata 再検証を行う |
-| AI が事実と異なる内容を生成する | 入力限定、structured output、元コミットへの導線、fixture 評価を用意する |
-| AI コストが増える | fingerprint cache、非同期生成、chunk 上限、予算上限を設ける |
-| 日付集計がずれる | UTC 保存、表示時の設定タイムゾーン変換、境界値テストを徹底する |
-| commit author の判定を誤る | GitHub user ID を優先し、関連付け不能な commit の扱いを明示する |
+| リスク                                          | 対策                                                                                               |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| private 情報が public に混ざる                  | data-access 層、要約、cache namespace を scope ごとに分離し、canary private fixture で自動検査する |
+| GitHub API rate limit                           | 差分同期、ETag/conditional request、backoff、最終成功データの継続表示を行う                        |
+| force-push や visibility 変更でデータが古くなる | overlap を持つ定期再同期と、定期的な repository metadata 再検証を行う                              |
+| AI が事実と異なる内容を生成する                 | 入力限定、structured output、元コミットへの導線、fixture 評価を用意する                            |
+| AI コストが増える                               | fingerprint cache、非同期生成、chunk 上限、予算上限を設ける                                        |
+| 日付集計がずれる                                | UTC 保存、表示時の設定タイムゾーン変換、境界値テストを徹底する                                     |
+| commit author の判定を誤る                      | GitHub user ID を優先し、関連付け不能な commit の扱いを明示する                                    |
 
 ## リリース判定チェックリスト
 

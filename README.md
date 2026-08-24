@@ -25,10 +25,10 @@ GitHub のコミット履歴を、日次・週次・月次の changelog とし�
 
 ### 公開範囲
 
-| モード | URL | 認証 | 対象リポジトリ | キャッシュ・ログ上の扱い |
-| --- | --- | --- | --- | --- |
-| Public | `/` または `/public` | 不要 | public のみ | CDN キャッシュ可能 |
-| All | `/all` | 必須 | public/private | private キャッシュ禁止、検索エンジン非公開 |
+| モード | URL                  | 認証 | 対象リポジトリ | キャッシュ・ログ上の扱い                   |
+| ------ | -------------------- | ---- | -------------- | ------------------------------------------ |
+| Public | `/` または `/public` | 不要 | public のみ    | CDN キャッシュ可能                         |
+| All    | `/all`               | 必須 | public/private | private キャッシュ禁止、検索エンジン非公開 |
 
 公開範囲は表示時の絞り込みだけでなく、データ取得・API レスポンス・AI 要約・キャッシュの各層で分離します。public 向けレスポンスに private リポジトリの名前、コミットメッセージ、要約、件数を含めません。
 
@@ -95,10 +95,10 @@ https://github.com/:owner/:repo/commits?author=:owner&since=:since&until=:until
 
 2026年8月を例にした期間指定は次のとおりです。
 
-| 期間 | アプリ上の範囲（Asia/Tokyo） | `since` | `until` |
-| --- | --- | --- | --- |
-| Daily | 2026-08-20 00:00:00〜23:59:59 | `2026-08-19T15:00:00Z` | `2026-08-20T14:59:59Z` |
-| Weekly | 2026-08-16 00:00:00〜2026-08-22 23:59:59 | `2026-08-15T15:00:00Z` | `2026-08-22T14:59:59Z` |
+| 期間    | アプリ上の範囲（Asia/Tokyo）             | `since`                | `until`                |
+| ------- | ---------------------------------------- | ---------------------- | ---------------------- |
+| Daily   | 2026-08-20 00:00:00〜23:59:59            | `2026-08-19T15:00:00Z` | `2026-08-20T14:59:59Z` |
+| Weekly  | 2026-08-16 00:00:00〜2026-08-22 23:59:59 | `2026-08-15T15:00:00Z` | `2026-08-22T14:59:59Z` |
 | Monthly | 2026-08-01 00:00:00〜2026-08-31 23:59:59 | `2026-07-31T15:00:00Z` | `2026-08-31T14:59:59Z` |
 
 実際の URL では query parameter を URL encode します。各コミットの SHA リンクは、従来どおり GitHub の個別コミットページへ遷移します。
@@ -207,16 +207,16 @@ GitHub API から毎回すべてを読み込むのではなく、バックグラ
 
 本番アプリケーションは次の Cloudflare サービスで構成します。
 
-| 役割 | Cloudflare サービス | 用途 |
-| --- | --- | --- |
-| Web / API | Workers | React アプリ、API、GitHub OAuth callback、認証・認可 |
-| Frontend assets | Workers Static Assets | HTML、JavaScript、CSS、画像の配信 |
-| Database | D1 | repository、commit、変更レコード、同期状態、認証データ |
-| 定期実行 | Cron Triggers | GitHub 差分同期の開始。Cron は UTC で設定する |
-| 非同期処理 | Queues | リポジトリ同期、変更レコード更新、AI 要約生成、retry |
-| AI | Workers AI を第一候補 | 変更レコード単位の日本語要約。provider adapter は維持する |
-| Secrets | Workers Secrets | GitHub、OAuth、AI、Webhook、session の秘密情報 |
-| Monitoring | Workers Observability | request、scheduled、queue consumer のログと障害確認 |
+| 役割            | Cloudflare サービス   | 用途                                                      |
+| --------------- | --------------------- | --------------------------------------------------------- |
+| Web / API       | Workers               | React アプリ、API、GitHub OAuth callback、認証・認可      |
+| Frontend assets | Workers Static Assets | HTML、JavaScript、CSS、画像の配信                         |
+| Database        | D1                    | repository、commit、変更レコード、同期状態、認証データ    |
+| 定期実行        | Cron Triggers         | GitHub 差分同期の開始。Cron は UTC で設定する             |
+| 非同期処理      | Queues                | リポジトリ同期、変更レコード更新、AI 要約生成、retry      |
+| AI              | Workers AI を第一候補 | 変更レコード単位の日本語要約。provider adapter は維持する |
+| Secrets         | Workers Secrets       | GitHub App と session の秘密情報                          |
+| Monitoring      | Workers Observability | request、scheduled、queue consumer のログと障害確認       |
 
 Web、API、Static Assets は1つの Worker としてデプロイします。Cron Trigger は同期ジョブを Queue へ投入し、Queue consumer が GitHub API 取得・D1 更新・要約生成を実行します。Queue は再配信されても壊れないよう、すべての consumer を idempotent にします。繰り返し失敗した job は dead-letter queue に移し、原因を確認して再実行できるようにします。
 
@@ -234,45 +234,101 @@ Web、API、Static Assets は1つの Worker としてデプロイします。Cro
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "changes",
-  "main": "src/worker.ts",
-  "compatibility_date": "2026-08-20",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-08-18",
   "routes": [
     {
       "pattern": "changes.wayaga.org",
-      "custom_domain": true
-    }
+      "custom_domain": true,
+    },
   ],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "changes-production",
-      "database_id": "<D1_DATABASE_ID>"
-    }
+      "database_id": "<D1_DATABASE_ID>",
+    },
   ],
   "queues": {
     "producers": [
       {
         "binding": "JOBS",
-        "queue": "changes-jobs"
-      }
+        "queue": "changes-jobs",
+      },
     ],
     "consumers": [
       {
         "queue": "changes-jobs",
-        "dead_letter_queue": "changes-jobs-dlq"
-      }
-    ]
+        "dead_letter_queue": "changes-jobs-dlq",
+      },
+    ],
   },
   "triggers": {
-    "crons": ["<SYNC_CRON_IN_UTC>"]
+    "crons": ["<SYNC_CRON_IN_UTC>"],
   },
   "observability": {
-    "enabled": true
-  }
+    "enabled": true,
+  },
 }
 ```
 
 D1 database ID や Cron の頻度は環境作成時に確定します。秘密値は `wrangler.jsonc` や Git に書かず、環境ごとの Workers Secrets として登録します。`wayaga.org` が対象 Cloudflare account の active zone であり、`changes.wayaga.org` に競合する既存 DNS record / Worker route がないことを、Custom Domain 作成前に読み取り確認します。
+
+## 開発
+
+Node.js 24 と npm を使用します。
+
+```bash
+npm install
+cp .dev.vars.example .dev.vars
+npm run d1:migrate:local
+npm run dev
+```
+
+`.dev.vars` に GitHub App の installation / user authorization 用の値を設定します。このファイルは Git 管理しません。ローカル画面は `http://localhost:5173`、health check は `/api/health` です。`all` の callback は GitHub 側にもローカル用 URL を登録するか、本番 URL で確認します。
+
+品質確認は次のコマンドでまとめて実行できます。
+
+```bash
+npm run check
+```
+
+個別には `npm run format:check`、`npm run lint`、`npm run typecheck`、`npm test`、`npm run build` を使用します。テストは Cloudflare Workers runtime 上で動き、test ごとに分離された D1 に migration を適用します。
+
+### 本番リソース
+
+- Worker: `changes-production`
+- D1: `changes-production`
+- Queue: `changes-jobs`
+- Dead-letter Queue: `changes-jobs-dlq`
+- Custom Domain: `changes.wayaga.org`
+
+初回デプロイ前に、GitHub App、許可ユーザー、セッション用の値を `.prod.vars` に設定します。このファイルは Git 管理されず、初回デプロイ時に Worker と Secrets を同時作成するためだけに使います。
+
+```bash
+cp .prod.vars.example .prod.vars
+# .prod.vars を編集する。SESSION_SECRET は `openssl rand -base64 48` などで生成する
+npm run d1:migrate:production
+npm run deploy:first
+```
+
+初回デプロイ後は `.prod.vars` を読み込まない `npm run deploy` を使います。secret を更新するときは `npx wrangler secret put <NAME> --name changes-production` を使い、値を対話入力します。秘密値を shell history、Git、issue、チャットへ貼り付けません。
+
+GitHub App は対象 owner `onishi` のリポジトリだけにインストールし、Contents の read-only 権限を付与します。同じ GitHub App の user authorization を All へのログインにも使うため、別の OAuth App は不要です。Callback URL は `https://changes.wayaga.org/api/auth/callback` とし、Webhook は初期版では無効にします。`ALLOWED_GITHUB_USER_ID` は login 名ではなく数値 user ID を設定します。
+
+GitHub App 作成時の値は次のとおりです。
+
+| 設定                                           | 値                                             |
+| ---------------------------------------------- | ---------------------------------------------- |
+| GitHub App name                                | `changes-wayaga` など一意の名前                |
+| Homepage URL                                   | `https://changes.wayaga.org`                   |
+| Callback URL                                   | `https://changes.wayaga.org/api/auth/callback` |
+| Request user authorization during installation | Off                                            |
+| Webhook active                                 | Off                                            |
+| Repository permissions → Contents              | Read-only                                      |
+| Where can this GitHub App be installed?        | Only on this account                           |
+
+作成後に private key と client secret を1つずつ生成し、App ID、Client ID、Client secret、private key を Secrets へ登録します。App を `onishi` にインストールし、installation URL の数値 ID を `GITHUB_INSTALLATION_ID` に設定します。初期同期対象を限定したい場合は、インストール時に `Only select repositories` を選びます。
 
 ### デプロイ方針
 
