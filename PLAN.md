@@ -25,17 +25,19 @@
 
 preview と production の Worker、D1、Queue、Secrets は分離します。AI provider と GitHub client はアプリ本体から interface で分離します。
 
-## 現在の進捗（2026-08-21）
+## 現在の進捗（2026-08-24）
 
 - React + Hono + Cloudflare Workers Static Assets のアプリ基盤を実装済み
 - D1 migration、GitHub App 同期、日・週・月の変更レコード集約、public / all API を実装済み
 - GitHub OAuth + 数値 user ID allowlist、HMAC 化した session、server-side guard を実装済み
 - Workers AI の JSON Mode サマリと Queue retry / dead-letter Queue を実装済み
 - 日付別 / リポジトリ別 UI、期間ページャ、50件 cursor、GitHub 期間ログリンクを実装済み
-- Workers runtime 上の unit / integration test 14件と GitHub Actions CI を追加済み
+- Workers runtime 上の unit / integration test 20件と GitHub Actions CI を追加済み
 - Cloudflare 本番 D1 `changes-production`、Queue `changes-jobs`、DLQ `changes-jobs-dlq` を作成し、初期 migration を適用済み
-- production dry-run で Worker、Static Assets、D1、Queues、Workers AI、Cron の bindings を確認済み
-- 本番デプロイ前の残件は GitHub App の作成と Secrets 登録、実データ同期・AI 品質確認（初回 deploy は必須 Secrets 不足で安全に停止済み）
+- GitHub App を owner `onishi` にインストールし、Contents read-only で public 44件 / private 33件の取得を確認済み
+- Worker、Static Assets、D1、Queues、Workers AI、Cron を `https://changes.wagaya.org` へ本番デプロイ済み
+- 初回同期で 1,935 commits、641 change records を作成し、AI 要約は 640件成功 / 1件失敗を確認済み
+- 残件は失敗した AI 要約の再試行、rate limit / 初回同期時間の計測、認証後の `/all` を含む browser E2E、運用 runbook の整備
 
 ## マイルストーン
 
@@ -45,7 +47,7 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 
 - [x] 対象とする単一 GitHub owner、default branch、同期対象外条件を確定する
 - [x] 1つの GitHub App を installation token と user authorization の両方に使う方式を決める
-- [ ] public/private を含むテスト用リポジトリで必要権限を検証する
+- [x] public/private を含むテスト用リポジトリで必要権限を検証する
 - [x] REST API で repository、commit、author、visibility を取得する client を作る
 - [ ] rate limit と初回同期時間を計測する
 - [x] `wagaya.org` が対象 Cloudflare account の active zone であることを確認する

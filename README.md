@@ -187,6 +187,7 @@ AI プロバイダーに private コードそのものは送信しません。�
 - OAuth token、AI API key、Webhook secret、session secret は Cloudflare Workers Secrets に保存し、ブラウザへ返さない
 - セッション Cookie は `HttpOnly`、`Secure`、`SameSite=Lax` を基本とする
 - all ページは `Cache-Control: private, no-store` とし、`noindex` を付与する
+- Static Assets のレスポンスヘッダーは `public/_headers`、API と Worker 経由のレスポンスヘッダーは middleware で設定する
 - 認証切れ、権限変更、リポジトリの public/private 変更を次回同期時に反映する
 
 ## データ同期
