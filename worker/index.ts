@@ -1,7 +1,7 @@
 import { app } from "./app";
 import { assertGitHubConfig } from "./config";
 import { queueMessageSchema, type QueueMessage } from "./domain";
-import { generateSummary } from "./summary";
+import { enqueueStaleSummaryRetries, generateSummary } from "./summary";
 import { isRetryableSyncError, syncOwner, syncRepository } from "./sync";
 
 async function processQueueMessage(
@@ -38,6 +38,24 @@ export default {
         now,
       ),
     ]);
+    try {
+      const summariesRequeued = await enqueueStaleSummaryRetries(env, now);
+      if (summariesRequeued > 0) {
+        console.log(
+          JSON.stringify({
+            event: "summary_retries_enqueued",
+            count: summariesRequeued,
+          }),
+        );
+      }
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: "summary_retries_enqueue_failed",
+          error: error instanceof Error ? error.message : "Unknown error",
+        }),
+      );
+    }
     await env.JOBS.send(
       {
         type: "sync-owner",
