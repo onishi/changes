@@ -42,6 +42,14 @@ const installationTokenSchema = z.object({ token: z.string().min(1) });
 export type GitHubRepository = z.infer<typeof repositorySchema>;
 export type GitHubCommit = z.infer<typeof commitSchema>;
 
+export interface GitHubRateLimit {
+  limit: number;
+  remaining: number;
+  used: number | null;
+  resetAt: string | null;
+  resource: string | null;
+}
+
 export class GitHubApiError extends Error {
   constructor(
     message: string,
@@ -55,6 +63,40 @@ export class GitHubApiError extends Error {
   get retryable(): boolean {
     return this.retryableOverride || this.status === 429 || this.status >= 500;
   }
+}
+
+function parseNonnegativeInteger(value: string | null): number | null {
+  if (value === null || !/^\d+$/u.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+export function parseGitHubRateLimit(headers: Headers): GitHubRateLimit | null {
+  const limit = parseNonnegativeInteger(headers.get("X-RateLimit-Limit"));
+  const remaining = parseNonnegativeInteger(
+    headers.get("X-RateLimit-Remaining"),
+  );
+  if (limit === null || remaining === null) return null;
+
+  const reset = parseNonnegativeInteger(headers.get("X-RateLimit-Reset"));
+  const resetDate = reset === null ? null : new Date(reset * 1000);
+  return {
+    limit,
+    remaining,
+    used: parseNonnegativeInteger(headers.get("X-RateLimit-Used")),
+    resetAt:
+      resetDate && !Number.isNaN(resetDate.getTime())
+        ? resetDate.toISOString()
+        : null,
+    resource: headers.get("X-RateLimit-Resource"),
+  };
+}
+
+function endpointCategory(path: string): string {
+  if (path.startsWith("/app/installations/")) return "installation-token";
+  if (path.startsWith("/installation/repositories")) return "repositories";
+  if (path.includes("/commits")) return "commits";
+  return "other";
 }
 
 function pemToPkcs8(pem: string): ArrayBuffer {
@@ -111,11 +153,37 @@ async function githubRequest(
     },
   });
 
+  const rateLimit = parseGitHubRateLimit(response.headers);
+  if (
+    rateLimit &&
+    (path.startsWith("/installation/repositories") || rateLimit.remaining === 0)
+  ) {
+    console.log(
+      JSON.stringify({
+        event: "github_rate_limit",
+        endpoint: endpointCategory(path),
+        status: response.status,
+        ...rateLimit,
+      }),
+    );
+  }
+
   if (!response.ok) {
     const rateLimited =
       response.status === 403 &&
       (response.headers.get("X-RateLimit-Remaining") === "0" ||
         response.headers.has("Retry-After"));
+    if (rateLimited) {
+      console.error(
+        JSON.stringify({
+          event: "github_api_rate_limited",
+          endpoint: endpointCategory(path),
+          status: response.status,
+          retryAfter: response.headers.get("Retry-After"),
+          rateLimit,
+        }),
+      );
+    }
     throw new GitHubApiError(
       `GitHub API request failed with ${String(response.status)}`,
       response.status,
