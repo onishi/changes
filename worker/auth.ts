@@ -149,7 +149,7 @@ export async function completeGitHubLogin(
     headers: {
       Accept: "application/vnd.github+json",
       Authorization: `Bearer ${token.data.access_token}`,
-      "User-Agent": "changes.wayaga.org",
+      "User-Agent": "changes.wagaya.org",
       "X-GitHub-Api-Version": "2026-03-10",
     },
   });

@@ -105,7 +105,7 @@ async function githubRequest(
     headers: {
       Accept: "application/vnd.github+json",
       Authorization: `Bearer ${token}`,
-      "User-Agent": "changes.wayaga.org",
+      "User-Agent": "changes.wagaya.org",
       "X-GitHub-Api-Version": "2026-03-10",
       ...init.headers,
     },

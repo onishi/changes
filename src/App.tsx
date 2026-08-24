@@ -506,7 +506,7 @@ export function App() {
       </main>
 
       <footer>
-        <span>changes.wayaga.org</span>
+        <span>changes.wagaya.org</span>
         <span>Times shown in Asia/Tokyo</span>
       </footer>
     </div>

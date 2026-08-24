@@ -6,7 +6,7 @@
 
 ## 採用構成
 
-本番環境は Cloudflare 上に構築し、`https://changes.wayaga.org` へデプロイします。
+本番環境は Cloudflare 上に構築し、`https://changes.wagaya.org` へデプロイします。
 
 - Frontend / Backend: TypeScript + React ベースの Cloudflare Workers 対応 framework
 - Runtime: Cloudflare Workers
@@ -21,7 +21,7 @@
 - Observability: Workers Observability
 - Test: unit / integration / browser E2E
 - Deployment: Workers Builds または GitHub Actions + Wrangler
-- Production domain: Worker Custom Domain `changes.wayaga.org`
+- Production domain: Worker Custom Domain `changes.wagaya.org`
 
 preview と production の Worker、D1、Queue、Secrets は分離します。AI provider と GitHub client はアプリ本体から interface で分離します。
 
@@ -48,8 +48,8 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 - [ ] public/private を含むテスト用リポジトリで必要権限を検証する
 - [x] REST API で repository、commit、author、visibility を取得する client を作る
 - [ ] rate limit と初回同期時間を計測する
-- [ ] `wayaga.org` が対象 Cloudflare account の active zone であることを確認する
-- [ ] `changes.wayaga.org` に競合する DNS record、Custom Domain、Worker route がないことを確認する
+- [x] `wagaya.org` が対象 Cloudflare account の active zone であることを確認する
+- [x] `changes.wagaya.org` に競合する DNS record、Custom Domain、Worker route がないことを確認する
 - [ ] Workers AI の日本語要約品質とコストを検証し、初期 AI provider を確定する
 - [ ] タイムゾーン、同期対象期間、fork/archive の扱いを設定値として確定する（週は日曜日始まりに固定）
 - [ ] private メタデータを外部 AI へ送信する運用について確認する
@@ -59,7 +59,7 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 - 必要な API 権限、概算 API コール数、同期方法が文書化されている
 - 同期対象が設定された単一 owner 配下だけであることを検証できている
 - `Asia/Tokyo`、日曜日始まりの週境界、default branch を共通設定として固定できている
-- `changes.wayaga.org` を Worker Custom Domain として利用できる
+- `changes.wagaya.org` を Worker Custom Domain として利用できる
 - private リポジトリを public レスポンスへ含めない query 方針が決まっている
 - Cloudflare resource 構成とローカル開発手順が決まっている
 

@@ -5,7 +5,7 @@ import { app } from "../worker/app";
 function testEnv(): Env {
   return {
     DB: env.DB,
-    APP_ORIGIN: "https://changes.wayaga.org",
+    APP_ORIGIN: "https://changes.wagaya.org",
     GITHUB_OWNER: "onishi",
     GITHUB_CLIENT_ID: "client-id",
     GITHUB_CLIENT_SECRET: "a-valid-client-secret-value",

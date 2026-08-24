@@ -2,7 +2,7 @@
 
 GitHub のコミット履歴を、日次・週次・月次の changelog として閲覧できる Web アプリケーションです。公開ページでは public リポジトリの活動だけを掲載し、認証が必要な `all` ページでは private リポジトリを含むすべての活動を確認できます。
 
-本番環境は Cloudflare Workers 上で動作させ、[https://changes.wayaga.org](https://changes.wayaga.org) で公開します。
+本番環境は Cloudflare Workers 上で動作させ、[https://changes.wagaya.org](https://changes.wagaya.org) で公開します。
 
 ## 目的
 
@@ -222,8 +222,8 @@ Web、API、Static Assets は1つの Worker としてデプロイします。Cro
 
 ### 本番ドメイン
 
-- Production URL: `https://changes.wayaga.org`
-- Cloudflare zone: `wayaga.org`
+- Production URL: `https://changes.wagaya.org`
+- Cloudflare zone: `wagaya.org`
 - Routing: Worker Custom Domain
 - TLS / DNS: Custom Domain の作成時に Cloudflare が管理する
 - Preview: production の D1、Queue、Secrets と分離した preview 環境を使用する
@@ -238,7 +238,7 @@ Web、API、Static Assets は1つの Worker としてデプロイします。Cro
   "compatibility_date": "2026-08-18",
   "routes": [
     {
-      "pattern": "changes.wayaga.org",
+      "pattern": "changes.wagaya.org",
       "custom_domain": true,
     },
   ],
@@ -272,7 +272,7 @@ Web、API、Static Assets は1つの Worker としてデプロイします。Cro
 }
 ```
 
-D1 database ID や Cron の頻度は環境作成時に確定します。秘密値は `wrangler.jsonc` や Git に書かず、環境ごとの Workers Secrets として登録します。`wayaga.org` が対象 Cloudflare account の active zone であり、`changes.wayaga.org` に競合する既存 DNS record / Worker route がないことを、Custom Domain 作成前に読み取り確認します。
+D1 database ID や Cron の頻度は環境作成時に確定します。秘密値は `wrangler.jsonc` や Git に書かず、環境ごとの Workers Secrets として登録します。`wagaya.org` が対象 Cloudflare account の active zone であり、`changes.wagaya.org` に競合する既存 DNS record / Worker route がないことを、Custom Domain 作成前に読み取り確認します。
 
 ## 開発
 
@@ -301,7 +301,7 @@ npm run check
 - D1: `changes-production`
 - Queue: `changes-jobs`
 - Dead-letter Queue: `changes-jobs-dlq`
-- Custom Domain: `changes.wayaga.org`
+- Custom Domain: `changes.wagaya.org`
 
 初回デプロイ前に、GitHub App、許可ユーザー、セッション用の値を `.prod.vars` に設定します。このファイルは Git 管理されず、初回デプロイ時に Worker と Secrets を同時作成するためだけに使います。
 
@@ -314,15 +314,15 @@ npm run deploy:first
 
 初回デプロイ後は `.prod.vars` を読み込まない `npm run deploy` を使います。secret を更新するときは `npx wrangler secret put <NAME> --name changes-production` を使い、値を対話入力します。秘密値を shell history、Git、issue、チャットへ貼り付けません。
 
-GitHub App は対象 owner `onishi` のリポジトリだけにインストールし、Contents の read-only 権限を付与します。同じ GitHub App の user authorization を All へのログインにも使うため、別の OAuth App は不要です。Callback URL は `https://changes.wayaga.org/api/auth/callback` とし、Webhook は初期版では無効にします。`ALLOWED_GITHUB_USER_ID` は login 名ではなく数値 user ID を設定します。
+GitHub App は対象 owner `onishi` のリポジトリだけにインストールし、Contents の read-only 権限を付与します。同じ GitHub App の user authorization を All へのログインにも使うため、別の OAuth App は不要です。Redirect URI は `https://changes.wagaya.org/api/auth/callback` とし、Webhook は初期版では無効にします。`ALLOWED_GITHUB_USER_ID` は login 名ではなく数値 user ID を設定します。
 
 GitHub App 作成時の値は次のとおりです。
 
 | 設定                                           | 値                                             |
 | ---------------------------------------------- | ---------------------------------------------- |
-| GitHub App name                                | `changes-wayaga` など一意の名前                |
-| Homepage URL                                   | `https://changes.wayaga.org`                   |
-| Callback URL                                   | `https://changes.wayaga.org/api/auth/callback` |
+| GitHub App name                                | `changes-wagaya` など一意の名前                |
+| Homepage URL                                   | `https://changes.wagaya.org`                   |
+| Redirect URI                                   | `https://changes.wagaya.org/api/auth/callback` |
 | Request user authorization during installation | Off                                            |
 | Webhook active                                 | Off                                            |
 | Repository permissions → Contents              | Read-only                                      |
@@ -336,7 +336,7 @@ GitHub App 作成時の値は次のとおりです。
 2. preview 用 Worker と D1 で migration と smoke test を実行する
 3. production D1 migration を適用する
 4. Worker code と Static Assets を同じ release としてデプロイする
-5. `https://changes.wayaga.org` で public、認証、API、Cron、Queue の smoke test を行う
+5. `https://changes.wagaya.org` で public、認証、API、Cron、Queue の smoke test を行う
 6. 問題がある場合は Worker version を rollback し、DB migration は backward-compatible な手順で戻す
 
 main branch から production へのデプロイには Cloudflare Workers Builds または GitHub Actions + Wrangler を使用します。production への反映は、CI が成功し、D1 migration と secret / binding の準備が完了した場合だけ行います。

@@ -42,7 +42,7 @@
     "crons": ["*/30 * * * *"],
   },
   "vars": {
-    "APP_ORIGIN": "https://changes.wayaga.org",
+    "APP_ORIGIN": "https://changes.wagaya.org",
     "GITHUB_OWNER": "onishi",
   },
   "secrets": {
@@ -76,7 +76,7 @@
       },
       "routes": [
         {
-          "pattern": "changes.wayaga.org",
+          "pattern": "changes.wagaya.org",
           "custom_domain": true,
         },
       ],
@@ -113,7 +113,7 @@
         "crons": ["*/30 * * * *"],
       },
       "vars": {
-        "APP_ORIGIN": "https://changes.wayaga.org",
+        "APP_ORIGIN": "https://changes.wagaya.org",
         "GITHUB_OWNER": "onishi",
       },
       "secrets": {
