@@ -199,7 +199,6 @@ function Overview({ data, route }: { data: OverviewData; route: RouteState }) {
     <>
       <section className="overview-hero">
         <p className="section-label">Public overview</p>
-        <h1>最近の変更を、ひと目で。</h1>
         <p>
           public リポジトリの今日・今週・今月の活動を、AI
           サマリとともに俯瞰できます。

@@ -224,21 +224,12 @@ main {
 
 .overview-hero {
   max-width: 900px;
-  padding: 22px 0 52px;
-}
-
-.overview-hero h1 {
-  margin: 0;
-  font-family: "Newsreader", Georgia, serif;
-  font-size: clamp(3.4rem, 7vw, 6.8rem);
-  font-weight: 400;
-  letter-spacing: -0.06em;
-  line-height: 0.9;
+  padding: 22px 0 36px;
 }
 
 .overview-hero > p:last-child {
   max-width: 620px;
-  margin: 24px 0 0;
+  margin: 0;
   color: var(--muted);
   font-size: 0.98rem;
   line-height: 1.8;
@@ -799,10 +790,6 @@ footer {
 
   .overview-hero {
     padding-top: 0;
-  }
-
-  .overview-hero h1 {
-    font-size: 3.4rem;
   }
 
   .overview-card {
