@@ -32,12 +32,14 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 - GitHub OAuth + 数値 user ID allowlist、HMAC 化した session、server-side guard を実装済み
 - Workers AI の JSON Mode サマリと Queue retry / dead-letter Queue を実装済み
 - 日付別 / リポジトリ別 UI、期間ページャ、50件 cursor、GitHub 期間ログリンクを実装済み
-- Workers runtime 上の unit / integration test 20件と GitHub Actions CI を追加済み
+- Workers runtime 上の unit / integration test 25件と GitHub Actions CI を追加済み
 - Cloudflare 本番 D1 `changes-production`、Queue `changes-jobs`、DLQ `changes-jobs-dlq` を作成し、初期 migration を適用済み
 - GitHub App を owner `onishi` にインストールし、Contents read-only で public 44件 / private 33件の取得を確認済み
 - Worker、Static Assets、D1、Queues、Workers AI、Cron を `https://changes.wagaya.org` へ本番デプロイ済み
-- 初回同期で 1,935 commits、641 change records を作成し、AI 要約は 640件成功 / 1件失敗を確認済み
-- 残件は失敗した AI 要約の再試行、rate limit / 初回同期時間の計測、認証後の `/all` を含む browser E2E、運用 runbook の整備
+- 初回同期で 1,935 commits、641 change records を作成し、AI 要約は 641件すべて ready であることを確認済み
+- JSON が途中で切れた AI 要約1件を prompt version 更新時の自動再投入で回復し、古い成功済み要約を再生成しないことを本番確認済み
+- GitHub API の rate-limit snapshot と制限到達を、private リポジトリ名や token を含めない構造化ログで確認可能
+- 残件は実 rate-limit 残量 / 初回同期完了時間の計測、認証後の `/all` を含む browser E2E、運用 runbook の整備
 
 ## マイルストーン
 
@@ -123,7 +125,7 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 - [x] Queue retry/backoff と dead-letter Queue を実装する
 - [x] 30分間隔の Cron Trigger を設定する
 - [ ] 必要であれば GitHub Webhook と署名検証を追加する
-- [ ] 最終成功時刻、同期状態、rate-limit を運用画面またはログで確認可能にする
+- [x] 最終成功時刻、同期状態、rate-limit を運用画面またはログで確認可能にする
 
 完了条件:
 
@@ -194,6 +196,7 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 - [ ] 長い期間を chunk → reduce する処理を実装する
 - [x] commit 集合が変わった daily / weekly / monthly の変更レコードだけ invalidation する
 - [x] Queue による非同期生成、進行状態、retry/backoff を実装する
+- [x] prompt version 更新時に古い failed 要約だけを再投入し、投入失敗時は状態を復元する
 - [ ] rate limit、token budget、月次コスト上限を設定する
 - [x] prompt injection を想定し、commit message を命令ではなくデータとして扱う
 - [ ] hallucination、private 混入、空期間、日本語品質の fixture test を追加する

@@ -342,6 +342,17 @@ GitHub App 作成時の値は次のとおりです。
 
 main branch から production へのデプロイには Cloudflare Workers Builds または GitHub Actions + Wrangler を使用します。production への反映は、CI が成功し、D1 migration と secret / binding の準備が完了した場合だけ行います。
 
+### 運用監視
+
+本番ログは `npx wrangler tail changes-production` または Workers Observability で確認します。主な構造化ログ event は次のとおりです。
+
+- `github_rate_limit`: owner 同期開始時の GitHub API `limit`、`remaining`、`used`、`resetAt`。endpoint は種別だけを記録し、リポジトリ名や token は含めない
+- `github_api_rate_limited`: primary / secondary rate limit 到達時の status、`Retry-After`、rate-limit snapshot
+- `summary_retries_enqueued`: prompt version が古い failed 要約を Cron から再投入した件数。1回最大25件
+- `queue_message_failed`: Queue message の種別、attempt、retryable 判定、秘密値を含まないエラー概要
+
+AI 要約は JSON Schema とアプリ側 schema の両方で検証します。JSON の途中切れなどで失敗したレコードは failed のままコミット一覧を表示し、prompt version を更新したリリース後の Cron で新しい version に限って再投入します。
+
 ### Cloudflare 公式リファレンス
 
 - [Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/)
