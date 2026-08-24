@@ -222,19 +222,6 @@ main {
   padding-bottom: 42px;
 }
 
-.overview-hero {
-  max-width: 900px;
-  padding: 22px 0 36px;
-}
-
-.overview-hero > p:last-child {
-  max-width: 620px;
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.98rem;
-  line-height: 1.8;
-}
-
 .overview-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -786,10 +773,6 @@ footer {
   .hero h1 {
     font-size: 2.7rem;
     line-height: 1;
-  }
-
-  .overview-hero {
-    padding-top: 0;
   }
 
   .overview-card {

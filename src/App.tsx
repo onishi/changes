@@ -196,28 +196,16 @@ function OverviewCard({
 
 function Overview({ data, route }: { data: OverviewData; route: RouteState }) {
   return (
-    <>
-      <section className="overview-hero">
-        <p className="section-label">Public overview</p>
-        <p>
-          public リポジトリの今日・今週・今月の活動を、AI
-          サマリとともに俯瞰できます。
-        </p>
-      </section>
-
-      <SyncNote data={data.daily} />
-
-      <section className="overview-grid" aria-label="最近の変更サマリ">
-        {overviewPeriods.map((period) => (
-          <OverviewCard
-            data={data[period]}
-            key={period}
-            period={period}
-            route={route}
-          />
-        ))}
-      </section>
-    </>
+    <section className="overview-grid" aria-label="最近の変更サマリ">
+      {overviewPeriods.map((period) => (
+        <OverviewCard
+          data={data[period]}
+          key={period}
+          period={period}
+          route={route}
+        />
+      ))}
+    </section>
   );
 }
 
