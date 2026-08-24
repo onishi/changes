@@ -80,6 +80,11 @@ export function buildPath(
   return cursor ? `${path}?cursor=${encodeURIComponent(cursor)}` : path;
 }
 
+export function isOverviewPath(pathname: string): boolean {
+  const parts = pathname.split("/").filter(Boolean);
+  return parts.length === 0 || (parts.length === 1 && parts[0] === "public");
+}
+
 function decodeRepository(value: string): string | null {
   try {
     return decodeURIComponent(value);
@@ -88,8 +93,12 @@ function decodeRepository(value: string): string | null {
   }
 }
 
-export function parseRoute(location: Location): RouteState {
+export function parseRoute(
+  location: { pathname: string; search: string },
+  onCanonicalPath?: (path: string) => void,
+): RouteState {
   const parts = location.pathname.split("/").filter(Boolean);
+  const isOverview = isOverviewPath(location.pathname);
   let index = 0;
   const scope: Scope = parts[0] === "all" ? "all" : "public";
   if (scope === "all") index += 1;
@@ -114,14 +123,15 @@ export function parseRoute(location: Location): RouteState {
     : currentPeriodKey(period);
   const route = {
     scope,
+    isOverview,
     period,
     key: periodKeyForDate(period, key),
     repository,
     cursor: new URLSearchParams(location.search).get("cursor"),
   } satisfies RouteState;
 
-  if (!candidatePeriod || !candidateKey || !validKey) {
-    window.history.replaceState(null, "", buildPath(route));
+  if (!isOverview && (!candidatePeriod || !candidateKey || !validKey)) {
+    onCanonicalPath?.(buildPath(route));
   }
   return route;
 }

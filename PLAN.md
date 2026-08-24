@@ -168,6 +168,7 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 - [x] Daily / Weekly / Monthly の切り替えを作る
 - [x] 日付 picker と repository selector を作る
 - [x] 期間ページの stats と repository ごとの変更レコード一覧を作る
+- [x] public トップに現在の Daily / Weekly / Monthly を横断するサマリを作る
 - [x] 変更レコード内に AI summary、commit count、元 commit list を表示する
 - [x] 各変更レコードに「GitHub でコミットログを見る」外部リンクを表示する
 - [x] repository ページを作る

@@ -3,6 +3,7 @@ export type Scope = "public" | "all";
 
 export interface RouteState {
   scope: Scope;
+  isOverview: boolean;
   period: PeriodType;
   key: string;
   repository: string | null;

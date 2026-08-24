@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   buildPath,
+  currentPeriodKey,
   isFuturePeriod,
   parseRoute,
   periodKeyForDate,
@@ -19,6 +20,10 @@ const periodLabels: Record<PeriodType, string> = {
   weekly: "Weekly",
   monthly: "Monthly",
 };
+
+const overviewPeriods: PeriodType[] = ["daily", "weekly", "monthly"];
+
+type OverviewData = Record<PeriodType, PeriodResponse>;
 
 const dateFormatter = new Intl.DateTimeFormat("ja-JP", {
   timeZone: "Asia/Tokyo",
@@ -89,6 +94,131 @@ function Summary({ record }: { record: ChangeRecord }) {
     <p className={`summary-state summary-${record.summary.status}`}>
       {messages[record.summary.status]}
     </p>
+  );
+}
+
+function summaryPreview(record: ChangeRecord): string {
+  if (record.summary.status === "ready" && record.summary.text) {
+    return record.summary.text;
+  }
+  if (record.summary.status === "failed") {
+    return "AI サマリを生成できませんでした。";
+  }
+  return "AI サマリを生成中です。";
+}
+
+function SyncNote({ data }: { data: PeriodResponse }) {
+  return (
+    <p className={`sync-note sync-${data.sync.status}`}>
+      <span aria-hidden="true" />
+      {data.sync.status === "running"
+        ? "GitHub の変更を同期しています"
+        : data.sync.status === "failed"
+          ? "直近の同期に失敗しました。前回成功時のデータを表示しています"
+          : data.sync.lastSyncedAt
+            ? `最終同期 ${timeFormatter.format(new Date(data.sync.lastSyncedAt))}`
+            : "初回の GitHub 同期待ちです"}
+    </p>
+  );
+}
+
+function OverviewCard({
+  data,
+  period,
+  route,
+}: {
+  data: PeriodResponse;
+  period: PeriodType;
+  route: RouteState;
+}) {
+  const detailPath = buildPath(route, {
+    period,
+    key: data.period.key,
+    repository: null,
+    cursor: null,
+  });
+  const visibleRecords = data.records.slice(0, 3);
+
+  return (
+    <article className={`overview-card overview-${period}`}>
+      <header className="overview-card-header">
+        <div>
+          <p className="section-label">{periodLabels[period]}</p>
+          <h2>{formatPeriod(data)}</h2>
+        </div>
+        <dl className="overview-stats">
+          <div>
+            <dt>Commits</dt>
+            <dd>{data.stats.commit_count}</dd>
+          </div>
+          <div>
+            <dt>Repos</dt>
+            <dd>{data.stats.repository_count}</dd>
+          </div>
+        </dl>
+      </header>
+
+      <div className="overview-records">
+        {visibleRecords.length === 0 ? (
+          <p className="overview-empty">この期間の変更はありません。</p>
+        ) : (
+          visibleRecords.map((record) => (
+            <article className="overview-record" key={record.id}>
+              <h3>
+                <a
+                  href={buildPath(route, {
+                    period,
+                    key: data.period.key,
+                    repository: record.repository.name,
+                    cursor: null,
+                  })}
+                >
+                  {record.repository.name}
+                </a>
+              </h3>
+              <span>{record.commitCount} commits</span>
+              <p>{summaryPreview(record)}</p>
+            </article>
+          ))
+        )}
+      </div>
+
+      <a className="overview-detail-link" href={detailPath}>
+        {periodLabels[period]} の詳細を見る
+        {data.stats.repository_count > visibleRecords.length
+          ? ` · ほか ${String(data.stats.repository_count - visibleRecords.length)} 件`
+          : ""}
+        <span aria-hidden="true"> →</span>
+      </a>
+    </article>
+  );
+}
+
+function Overview({ data, route }: { data: OverviewData; route: RouteState }) {
+  return (
+    <>
+      <section className="overview-hero">
+        <p className="section-label">Public overview</p>
+        <h1>最近の変更を、ひと目で。</h1>
+        <p>
+          public リポジトリの今日・今週・今月の活動を、AI
+          サマリとともに俯瞰できます。
+        </p>
+      </section>
+
+      <SyncNote data={data.daily} />
+
+      <section className="overview-grid" aria-label="最近の変更サマリ">
+        {overviewPeriods.map((period) => (
+          <OverviewCard
+            data={data[period]}
+            key={period}
+            period={period}
+            route={route}
+          />
+        ))}
+      </section>
+    </>
   );
 }
 
@@ -190,19 +320,14 @@ function Header({
     });
   };
   const allPath = buildPath(route, { scope: "all", cursor: null });
-  const publicPath = buildPath(route, { scope: "public", cursor: null });
+  const publicPath = route.isOverview
+    ? "/"
+    : buildPath(route, { scope: "public", cursor: null });
 
   return (
     <>
       <header className="site-header">
-        <a
-          className="brand"
-          href={buildPath(route, {
-            scope: "public",
-            repository: null,
-            cursor: null,
-          })}
-        >
+        <a className="brand" href="/">
           changes<span>.</span>
         </a>
         <nav className="scope-nav" aria-label="公開範囲">
@@ -248,48 +373,52 @@ function Header({
         </div>
       </header>
 
-      <section className="controls" aria-label="表示条件">
-        <nav className="period-nav" aria-label="期間単位">
-          {(Object.keys(periodLabels) as PeriodType[]).map((period) => (
-            <a
-              key={period}
-              href={buildPath(route, { period, cursor: null })}
-              aria-current={route.period === period ? "page" : undefined}
-            >
-              {periodLabels[period]}
-            </a>
-          ))}
-        </nav>
-        <label className="field">
-          <span>
-            {route.period === "monthly"
-              ? "月"
-              : route.period === "weekly"
-                ? "週の日曜日"
-                : "日付"}
-          </span>
-          <input
-            type={route.period === "monthly" ? "month" : "date"}
-            value={route.key}
-            onChange={(event) => onDateChange(event.currentTarget.value)}
-          />
-        </label>
-        <label className="field repository-field">
-          <span>リポジトリ</span>
-          <select
-            value={route.repository ?? ""}
-            onChange={(event) => onRepositoryChange(event.currentTarget.value)}
-          >
-            <option value="">すべてのリポジトリ</option>
-            {repositories.map((repository) => (
-              <option key={repository.id} value={repository.name}>
-                {repository.name}
-                {repository.visibility !== "public" ? " · private" : ""}
-              </option>
+      {!route.isOverview && (
+        <section className="controls" aria-label="表示条件">
+          <nav className="period-nav" aria-label="期間単位">
+            {(Object.keys(periodLabels) as PeriodType[]).map((period) => (
+              <a
+                key={period}
+                href={buildPath(route, { period, cursor: null })}
+                aria-current={route.period === period ? "page" : undefined}
+              >
+                {periodLabels[period]}
+              </a>
             ))}
-          </select>
-        </label>
-      </section>
+          </nav>
+          <label className="field">
+            <span>
+              {route.period === "monthly"
+                ? "月"
+                : route.period === "weekly"
+                  ? "週の日曜日"
+                  : "日付"}
+            </span>
+            <input
+              type={route.period === "monthly" ? "month" : "date"}
+              value={route.key}
+              onChange={(event) => onDateChange(event.currentTarget.value)}
+            />
+          </label>
+          <label className="field repository-field">
+            <span>リポジトリ</span>
+            <select
+              value={route.repository ?? ""}
+              onChange={(event) =>
+                onRepositoryChange(event.currentTarget.value)
+              }
+            >
+              <option value="">すべてのリポジトリ</option>
+              {repositories.map((repository) => (
+                <option key={repository.id} value={repository.name}>
+                  {repository.name}
+                  {repository.visibility !== "public" ? " · private" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        </section>
+      )}
     </>
   );
 }
@@ -334,8 +463,15 @@ function Loading() {
 }
 
 export function App() {
-  const route = useMemo(() => parseRoute(window.location), []);
+  const route = useMemo(
+    () =>
+      parseRoute(window.location, (path) =>
+        window.history.replaceState(null, "", path),
+      ),
+    [],
+  );
   const [data, setData] = useState<PeriodResponse | null>(null);
+  const [overviewData, setOverviewData] = useState<OverviewData | null>(null);
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -346,6 +482,37 @@ export function App() {
       setError(null);
       const scope = route.scope === "all" ? "all" : "public";
       try {
+        if (route.isOverview) {
+          const [daily, weekly, monthly] = await Promise.all([
+            fetchJson<PeriodResponse>(
+              apiPath({
+                ...route,
+                period: "daily",
+                key: currentPeriodKey("daily"),
+              }),
+              signal,
+            ),
+            fetchJson<PeriodResponse>(
+              apiPath({
+                ...route,
+                period: "weekly",
+                key: currentPeriodKey("weekly"),
+              }),
+              signal,
+            ),
+            fetchJson<PeriodResponse>(
+              apiPath({
+                ...route,
+                period: "monthly",
+                key: currentPeriodKey("monthly"),
+              }),
+              signal,
+            ),
+          ]);
+          setOverviewData({ daily, weekly, monthly });
+          return;
+        }
+
         const requests: [
           Promise<PeriodResponse>,
           Promise<{ repositories: Repository[] }>,
@@ -432,6 +599,12 @@ export function App() {
               もう一度試す
             </button>
           </section>
+        ) : route.isOverview ? (
+          overviewData ? (
+            <Overview data={overviewData} route={route} />
+          ) : (
+            <Loading />
+          )
         ) : !data ? (
           <Loading />
         ) : (
@@ -458,16 +631,7 @@ export function App() {
               </dl>
             </section>
 
-            <p className={`sync-note sync-${data.sync.status}`}>
-              <span aria-hidden="true" />
-              {data.sync.status === "running"
-                ? "GitHub の変更を同期しています"
-                : data.sync.status === "failed"
-                  ? "直近の同期に失敗しました。前回成功時のデータを表示しています"
-                  : data.sync.lastSyncedAt
-                    ? `最終同期 ${timeFormatter.format(new Date(data.sync.lastSyncedAt))}`
-                    : "初回の GitHub 同期待ちです"}
-            </p>
+            <SyncNote data={data} />
 
             <PeriodPager route={route} data={data} />
 
