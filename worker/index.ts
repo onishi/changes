@@ -1,7 +1,7 @@
 import { app } from "./app";
 import { assertGitHubConfig } from "./config";
 import { queueMessageSchema, type QueueMessage } from "./domain";
-import { enqueueStaleSummaryRetries, generateSummary } from "./summary";
+import { enqueueStaleSummaryRefreshes, generateSummary } from "./summary";
 import { isRetryableSyncError, syncOwner, syncRepository } from "./sync";
 
 async function processQueueMessage(
@@ -39,11 +39,11 @@ export default {
       ),
     ]);
     try {
-      const summariesRequeued = await enqueueStaleSummaryRetries(env, now);
+      const summariesRequeued = await enqueueStaleSummaryRefreshes(env, now);
       if (summariesRequeued > 0) {
         console.log(
           JSON.stringify({
-            event: "summary_retries_enqueued",
+            event: "summary_refreshes_enqueued",
             count: summariesRequeued,
           }),
         );
@@ -51,7 +51,7 @@ export default {
     } catch (error) {
       console.error(
         JSON.stringify({
-          event: "summary_retries_enqueue_failed",
+          event: "summary_refreshes_enqueue_failed",
           error: error instanceof Error ? error.message : "Unknown error",
         }),
       );

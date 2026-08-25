@@ -352,10 +352,10 @@ main branch から production へのデプロイには Cloudflare Workers Builds
 
 - `github_rate_limit`: owner 同期開始時の GitHub API `limit`、`remaining`、`used`、`resetAt`。endpoint は種別だけを記録し、リポジトリ名や token は含めない
 - `github_api_rate_limited`: primary / secondary rate limit 到達時の status、`Retry-After`、rate-limit snapshot
-- `summary_retries_enqueued`: prompt version が古い failed 要約を Cron から再投入した件数。1回最大25件
+- `summary_refreshes_enqueued`: prompt version が古い ready / failed 要約を Cron から再投入した件数。1回最大25件
 - `queue_message_failed`: Queue message の種別、attempt、retryable 判定、秘密値を含まないエラー概要
 
-AI 要約は JSON Schema とアプリ側 schema の両方で検証します。JSON の途中切れなどで失敗したレコードは failed のままコミット一覧を表示し、prompt version を更新したリリース後の Cron で新しい version に限って再投入します。
+AI 要約は JSON Schema とアプリ側 schema の両方で100〜200文字に検証します。JSON の途中切れなどで失敗したレコードは failed のままコミット一覧を表示し、prompt version を更新したリリース後の Cron で古い ready / failed 要約を新しい version に限って再投入します。
 
 ### Cloudflare 公式リファレンス
 
