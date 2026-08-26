@@ -110,7 +110,7 @@ describe("Workers AI summaries", () => {
       const content = (message as Record<string, unknown>).content;
       return typeof content === "string" ? content : "";
     });
-    expect(contents[0]).toContain("要約は100〜200文字");
+    expect(contents[0]).toContain("要約は100文字程度");
     expect(contents[1]).toContain(
       "body: 選択した期間をURLへ反映し、前後期間への移動と再読み込み後の状態維持に対応した。",
     );
@@ -120,7 +120,7 @@ describe("Workers AI summaries", () => {
       response_format: {
         type: "json_schema",
         json_schema: {
-          properties: { summary: { minLength: 100, maxLength: 200 } },
+          properties: { summary: { minLength: 80, maxLength: 150 } },
         },
       },
     });
@@ -140,11 +140,14 @@ describe("Workers AI summaries", () => {
     });
   });
 
-  it("rejects summaries shorter than 100 characters", async () => {
+  it.each([
+    ["shorter than 80 characters", "あ".repeat(79)],
+    ["longer than 150 characters", "あ".repeat(151)],
+  ])("rejects summaries %s", async (_case, summary) => {
     const changeRecordId = await seedSummaryRecord();
     const run = vi.fn(() =>
       Promise.resolve({
-        response: { summary: "期間ナビゲーションを追加した。" },
+        response: { summary },
       }),
     );
 
