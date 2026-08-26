@@ -33,6 +33,22 @@ describe("HTTP access boundaries", () => {
     expect(period.headers.get("Cache-Control")).toContain("public");
   });
 
+  it("rejects periods that end before the data cutoff", async () => {
+    const daily = await app.request(
+      "/api/public/periods/daily/2026-04-30",
+      {},
+      testEnv(),
+    );
+    expect(daily.status).toBe(400);
+
+    const boundaryWeek = await app.request(
+      "/api/public/periods/weekly/2026-04-26",
+      {},
+      testEnv(),
+    );
+    expect(boundaryWeek.status).toBe(200);
+  });
+
   it("rejects unauthenticated all APIs and redirects all pages", async () => {
     const apiResponse = await app.request(
       "/api/all/repositories",

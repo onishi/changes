@@ -1,4 +1,8 @@
 import { periodTypes } from "./domain";
+import {
+  DATA_CUTOFF_MS,
+  clampInstantToDataCutoff,
+} from "../shared/data-cutoff";
 import type {
   ChangeRecordRow,
   CommitRow,
@@ -31,7 +35,11 @@ async function commitsForPeriod(
        WHERE repository_id = ? AND committed_at >= ? AND committed_at < ?
        ORDER BY committed_at ASC, oid ASC`,
     )
-    .bind(repositoryId, bounds.start, bounds.endExclusive)
+    .bind(
+      repositoryId,
+      clampInstantToDataCutoff(bounds.start),
+      bounds.endExclusive,
+    )
     .all<CommitRow>();
   return result.results;
 }
@@ -152,6 +160,7 @@ export async function rebuildAffectedRecords(
 ): Promise<string[]> {
   const uniqueBounds = new Map<string, PeriodBounds>();
   for (const timestamp of commitTimestamps) {
+    if (Date.parse(timestamp) < DATA_CUTOFF_MS) continue;
     for (const periodType of periodTypes) {
       const bounds = periodBoundsForInstant(periodType, timestamp);
       uniqueBounds.set(`${bounds.type}:${bounds.key}`, bounds);
@@ -182,7 +191,7 @@ export function createCommitLogUrl(
 ): string {
   const url = new URL(`${repository.html_url}/commits`);
   url.searchParams.set("author", owner);
-  url.searchParams.set("since", bounds.start);
+  url.searchParams.set("since", clampInstantToDataCutoff(bounds.start));
   url.searchParams.set("until", bounds.endInclusive);
   return url.toString();
 }

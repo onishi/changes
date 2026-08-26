@@ -1,4 +1,8 @@
 import type { PeriodType, RouteState, Scope } from "./types";
+import {
+  clampPeriodKeyToDataCutoff,
+  isPeriodKeyBeforeDataCutoff,
+} from "../shared/data-cutoff";
 
 const periods = new Set<PeriodType>(["daily", "weekly", "monthly"]);
 
@@ -66,11 +70,12 @@ export function buildPath(
     overrides.repository === undefined
       ? route.repository
       : overrides.repository;
-  const key =
+  const candidate =
     overrides.key ??
     (period === route.period
       ? route.key
       : periodKeyForDate(period, baseDate(route)));
+  const key = clampPeriodKeyToDataCutoff(period, candidate);
   const prefix = scope === "all" ? "/all" : "";
   const repositoryPart = repository
     ? `/repo/${encodeURIComponent(repository)}`
@@ -121,16 +126,26 @@ export function parseRoute(
   const key = validKey
     ? (candidateKey ?? currentPeriodKey(period))
     : currentPeriodKey(period);
+  const normalizedKey = clampPeriodKeyToDataCutoff(
+    period,
+    periodKeyForDate(period, key),
+  );
   const route = {
     scope,
     isOverview,
     period,
-    key: periodKeyForDate(period, key),
+    key: normalizedKey,
     repository,
     cursor: new URLSearchParams(location.search).get("cursor"),
   } satisfies RouteState;
 
-  if (!isOverview && (!candidatePeriod || !candidateKey || !validKey)) {
+  if (
+    !isOverview &&
+    (!candidatePeriod ||
+      !candidateKey ||
+      !validKey ||
+      normalizedKey !== candidateKey)
+  ) {
     onCanonicalPath?.(buildPath(route));
   }
   return route;
@@ -138,4 +153,11 @@ export function parseRoute(
 
 export function isFuturePeriod(type: PeriodType, key: string): boolean {
   return key >= currentPeriodKey(type);
+}
+
+export function isBeforeDataCutoffPeriod(
+  type: PeriodType,
+  key: string,
+): boolean {
+  return isPeriodKeyBeforeDataCutoff(type, key);
 }

@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   buildPath,
   currentPeriodKey,
+  isBeforeDataCutoffPeriod,
   isFuturePeriod,
   parseRoute,
   periodKeyForDate,
 } from "./routes";
+import { dataCutoffPeriodKey } from "../shared/data-cutoff";
 import type {
   ChangeRecord,
   PeriodResponse,
@@ -383,6 +385,7 @@ function Header({
             </span>
             <input
               type={route.period === "monthly" ? "month" : "date"}
+              min={dataCutoffPeriodKey(route.period)}
               value={route.key}
               onChange={(event) => onDateChange(event.currentTarget.value)}
             />
@@ -417,14 +420,27 @@ function PeriodPager({
   route: RouteState;
   data: PeriodResponse;
 }) {
+  const previousDisabled = isBeforeDataCutoffPeriod(
+    route.period,
+    data.period.previousKey,
+  );
   const nextDisabled = isFuturePeriod(route.period, data.period.key);
   return (
     <nav className="period-pager" aria-label="前後の期間">
-      <a
-        href={buildPath(route, { key: data.period.previousKey, cursor: null })}
-      >
-        <span aria-hidden="true">←</span> 前の{periodLabels[route.period]}
-      </a>
+      {previousDisabled ? (
+        <span aria-disabled="true">
+          <span aria-hidden="true">←</span> 前の{periodLabels[route.period]}
+        </span>
+      ) : (
+        <a
+          href={buildPath(route, {
+            key: data.period.previousKey,
+            cursor: null,
+          })}
+        >
+          <span aria-hidden="true">←</span> 前の{periodLabels[route.period]}
+        </a>
+      )}
       {nextDisabled ? (
         <span aria-disabled="true">
           次の{periodLabels[route.period]} <span aria-hidden="true">→</span>

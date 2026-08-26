@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  DATA_CUTOFF_INSTANT,
+  DATA_CUTOFF_LOCAL_DATE,
+} from "../shared/data-cutoff";
 import type {
   ChangeRecordRow,
   CommitRow,
@@ -87,6 +91,11 @@ export async function getPeriodRecords(options: {
   cursor?: string | null;
 }): Promise<Record<string, unknown>> {
   const bounds = periodBoundsForRoute(options.periodType, options.periodKey);
+  if (bounds.endExclusive <= DATA_CUTOFF_INSTANT) {
+    throw new Error(
+      `Periods before ${DATA_CUTOFF_LOCAL_DATE} are not available.`,
+    );
+  }
   if (options.periodKey > currentPeriodKey(options.periodType)) {
     throw new Error("Future periods are not available.");
   }
@@ -158,9 +167,10 @@ export async function getPeriodRecords(options: {
          JOIN commits c
            ON c.repository_id = crc.repository_id AND c.oid = crc.commit_oid
          WHERE crc.change_record_id IN (${placeholders})
+           AND c.committed_at >= ?
          ORDER BY c.committed_at DESC, c.oid ASC`,
     )
-      .bind(...records.map((record) => record.id))
+      .bind(...records.map((record) => record.id), DATA_CUTOFF_INSTANT)
       .all<CommitWithRecord>();
 
     for (const commit of commitsResult.results) {

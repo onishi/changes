@@ -19,5 +19,5 @@
     "types": ["vite/client"],
     "noUncheckedIndexedAccess": true
   },
-  "include": ["src"]
+  "include": ["src", "shared"]
 }

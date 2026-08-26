@@ -1,5 +1,10 @@
 import type { QueueMessage, RepositoryRow } from "./domain";
 import {
+  DATA_CUTOFF_INSTANT,
+  DATA_CUTOFF_MS,
+  clampInstantToDataCutoff,
+} from "../shared/data-cutoff";
+import {
   GitHubApiError,
   listInstalledRepositories,
   listRepositoryCommitsPage,
@@ -7,7 +12,6 @@ import {
 } from "./github";
 import { rebuildAffectedRecords } from "./records";
 
-const INITIAL_SYNC_DAYS = 365;
 const OVERLAP_MS = 2 * 24 * 60 * 60 * 1000;
 
 function log(level: "info" | "error", details: Record<string, unknown>): void {
@@ -150,16 +154,15 @@ async function getRepository(
     .first<RepositoryRow>();
 }
 
-function initialSince(repository: RepositoryRow, requestedAt: string): string {
-  const end = new Date(requestedAt).getTime();
+export function initialSince(repository: RepositoryRow): string {
   if (!repository.last_synced_at) {
-    return new Date(
-      end - INITIAL_SYNC_DAYS * 24 * 60 * 60 * 1000,
-    ).toISOString();
+    return DATA_CUTOFF_INSTANT;
   }
-  return new Date(
-    new Date(repository.last_synced_at).getTime() - OVERLAP_MS,
-  ).toISOString();
+  return clampInstantToDataCutoff(
+    new Date(
+      new Date(repository.last_synced_at).getTime() - OVERLAP_MS,
+    ).toISOString(),
+  );
 }
 
 export async function syncRepository(
@@ -171,7 +174,9 @@ export async function syncRepository(
     return;
   }
 
-  const since = message.since ?? initialSince(repository, message.requestedAt);
+  const since = clampInstantToDataCutoff(
+    message.since ?? initialSince(repository),
+  );
   const pageNumber = message.page ?? 1;
   const page = await listRepositoryCommitsPage(
     env,
@@ -180,7 +185,15 @@ export async function syncRepository(
     pageNumber,
   );
   const now = new Date().toISOString();
-  const statements = page.commits.map((commit) => {
+  const commits = page.commits.filter((commit) => {
+    const committedAt =
+      commit.commit.committer?.date ?? commit.commit.author?.date;
+    if (!committedAt) {
+      throw new Error(`Commit ${commit.sha} has no timestamp.`);
+    }
+    return Date.parse(committedAt) >= DATA_CUTOFF_MS;
+  });
+  const statements = commits.map((commit) => {
     const { headline, body } = splitCommitMessage(commit.commit.message);
     const committedAt =
       commit.commit.committer?.date ?? commit.commit.author?.date;
@@ -220,7 +233,7 @@ export async function syncRepository(
     await env.DB.batch(statements);
   }
 
-  const timestamps = page.commits.flatMap((commit) => {
+  const timestamps = commits.flatMap((commit) => {
     const timestamp =
       commit.commit.committer?.date ?? commit.commit.author?.date;
     return timestamp ? [timestamp] : [];
@@ -260,7 +273,7 @@ export async function syncRepository(
   log("info", {
     event: "sync_repository_succeeded",
     repositoryId: repository.id,
-    commits: page.commits.length,
+    commits: commits.length,
     page: pageNumber,
     hasNextPage: page.hasNextPage,
   });

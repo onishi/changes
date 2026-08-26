@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isOverviewPath, parseRoute } from "../src/routes";
+import { buildPath, isOverviewPath, parseRoute } from "../src/routes";
 
 describe("frontend routes", () => {
   it("keeps the public roots on the overview", () => {
@@ -29,5 +29,26 @@ describe("frontend routes", () => {
 
     expect(route.isOverview).toBe(false);
     expect(canonicalPaths).toEqual([`/all/daily/${route.key}`]);
+  });
+
+  it("clamps routes and period switches to the data cutoff", () => {
+    const canonicalPaths: string[] = [];
+    const route = parseRoute(
+      { pathname: "/daily/2026-04-30", search: "" },
+      (path) => canonicalPaths.push(path),
+    );
+
+    expect(route.key).toBe("2026-05-01");
+    expect(canonicalPaths).toEqual(["/daily/2026-05-01"]);
+    expect(
+      buildPath(
+        {
+          ...route,
+          period: "weekly",
+          key: "2026-04-26",
+        },
+        { period: "monthly" },
+      ),
+    ).toBe("/monthly/2026-05");
   });
 });

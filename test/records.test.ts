@@ -153,6 +153,59 @@ describe("change record aggregation and public boundary", () => {
     );
   });
 
+  it("keeps only cutoff-and-later commits in the boundary week", async () => {
+    await insertRepository(publicRepository);
+    await expect(
+      insertCommit(
+        publicRepository,
+        "before-cutoff",
+        "2026-04-30T14:59:59.000Z",
+        "Before cutoff",
+      ),
+    ).rejects.toThrow("cutoff");
+    await insertCommit(
+      publicRepository,
+      "at-cutoff",
+      "2026-04-30T15:00:00.000Z",
+      "At cutoff",
+    );
+
+    const pending = await rebuildAffectedRecords(testEnv(), publicRepository, [
+      "2026-04-30T14:59:59.000Z",
+      "2026-04-30T15:00:00.000Z",
+    ]);
+    expect(pending).toHaveLength(6);
+
+    const result = await getPeriodRecords({
+      env: testEnv(),
+      scope: "public",
+      periodType: "weekly",
+      periodKey: "2026-04-26",
+    });
+    const records = result.records as Array<{
+      commitCount: number;
+      commits: Array<{ oid: string }>;
+      commitLogUrl: string;
+    }>;
+    expect(records).toHaveLength(1);
+    expect(records[0]?.commitCount).toBe(1);
+    expect(records[0]?.commits.map((commit) => commit.oid)).toEqual([
+      "at-cutoff",
+    ]);
+    expect(
+      new URL(records[0]?.commitLogUrl ?? "").searchParams.get("since"),
+    ).toBe("2026-04-30T15:00:00.000Z");
+
+    await expect(
+      getPeriodRecords({
+        env: testEnv(),
+        scope: "public",
+        periodType: "daily",
+        periodKey: "2026-04-30",
+      }),
+    ).rejects.toThrow("before 2026-05-01");
+  });
+
   it("paginates records with a stable timestamp and repository cursor", async () => {
     const now = "2026-08-20T01:00:00.000Z";
     const statements: D1PreparedStatement[] = [];
