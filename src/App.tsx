@@ -315,7 +315,7 @@ function Header({
           </a>
         </nav>
         <div className="account">
-          {route.scope === "all" && session?.authenticated ? (
+          {route.scope === "all" && session?.authenticated && (
             <>
               <span>@{session.user?.login}</span>
               <button
@@ -332,10 +332,6 @@ function Header({
                 </button>
               </form>
             </>
-          ) : (
-            <a href={`/api/auth/login?returnTo=${encodeURIComponent(allPath)}`}>
-              All にサインイン
-            </a>
           )}
         </div>
       </header>
