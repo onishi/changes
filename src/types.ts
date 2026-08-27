@@ -92,3 +92,18 @@ export interface SessionResponse {
   authenticated: boolean;
   user: { id: string; login: string } | null;
 }
+
+export interface BootstrapData {
+  path: string;
+  periodData: PeriodResponse | null;
+  overviewData: Record<PeriodType, PeriodResponse> | null;
+  repositories: Repository[];
+  session: SessionResponse | null;
+  error: string | null;
+}
+
+declare global {
+  interface Window {
+    __CHANGES_BOOTSTRAP__?: BootstrapData;
+  }
+}

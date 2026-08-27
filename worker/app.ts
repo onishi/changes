@@ -9,6 +9,7 @@ import {
 import { getPeriodRecords, listRepositories } from "./api";
 import type { QueueMessage, Scope, SessionRow } from "./domain";
 import { isPeriodType } from "./records";
+import { serveBootstrappedShell } from "./bootstrap";
 
 type AppBindings = {
   Bindings: Env;
@@ -141,19 +142,33 @@ async function servePrivateShell(
     login.searchParams.set("returnTo", new URL(request.url).pathname);
     return Response.redirect(login.toString(), 302);
   }
-  const response = await env.ASSETS.fetch(request);
-  const headers = new Headers(response.headers);
-  headers.set("Cache-Control", "private, no-store");
-  headers.set("X-Robots-Tag", "noindex, nofollow");
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
+  return serveBootstrappedShell({ request, env, session });
 }
 
 app.get("/all", (context) => servePrivateShell(context.req.raw, context.env));
 app.get("/all/*", (context) => servePrivateShell(context.req.raw, context.env));
+
+app.get("/", (context) =>
+  serveBootstrappedShell({ request: context.req.raw, env: context.env }),
+);
+app.get("/public", (context) =>
+  serveBootstrappedShell({ request: context.req.raw, env: context.env }),
+);
+app.get("/public/*", (context) =>
+  serveBootstrappedShell({ request: context.req.raw, env: context.env }),
+);
+app.get("/daily/*", (context) =>
+  serveBootstrappedShell({ request: context.req.raw, env: context.env }),
+);
+app.get("/weekly/*", (context) =>
+  serveBootstrappedShell({ request: context.req.raw, env: context.env }),
+);
+app.get("/monthly/*", (context) =>
+  serveBootstrappedShell({ request: context.req.raw, env: context.env }),
+);
+app.get("/repo/*", (context) =>
+  serveBootstrappedShell({ request: context.req.raw, env: context.env }),
+);
 
 app.all("/api/*", (context) => context.json({ error: "Not found" }, 404));
 app.all("*", (context) => context.env.ASSETS.fetch(context.req.raw));

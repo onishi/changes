@@ -9,6 +9,7 @@ import {
 } from "./routes";
 import { dataCutoffPeriodKey } from "../shared/data-cutoff";
 import type {
+  BootstrapData,
   ChangeRecord,
   PeriodResponse,
   PeriodType,
@@ -473,11 +474,27 @@ export function App() {
       ),
     [],
   );
-  const [data, setData] = useState<PeriodResponse | null>(null);
-  const [overviewData, setOverviewData] = useState<OverviewData | null>(null);
-  const [repositories, setRepositories] = useState<Repository[]>([]);
-  const [session, setSession] = useState<SessionResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const bootstrap = useMemo<BootstrapData | null>(() => {
+    const initial = window.__CHANGES_BOOTSTRAP__;
+    const path = `${window.location.pathname}${window.location.search}`;
+    return initial?.path === path ? initial : null;
+  }, []);
+  const hasCompleteBootstrap = route.isOverview
+    ? Boolean(bootstrap?.overviewData || bootstrap?.error)
+    : Boolean(bootstrap?.periodData || bootstrap?.error);
+  const [data, setData] = useState<PeriodResponse | null>(
+    bootstrap?.periodData ?? null,
+  );
+  const [overviewData, setOverviewData] = useState<OverviewData | null>(
+    bootstrap?.overviewData ?? null,
+  );
+  const [repositories, setRepositories] = useState<Repository[]>(
+    bootstrap?.repositories ?? [],
+  );
+  const [session, setSession] = useState<SessionResponse | null>(
+    bootstrap?.session ?? null,
+  );
+  const [error, setError] = useState<string | null>(bootstrap?.error ?? null);
   const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(
@@ -529,21 +546,6 @@ export function App() {
         const [periodData, repositoryData] = await Promise.all(requests);
         setData(periodData);
         setRepositories(repositoryData.repositories);
-        if (
-          route.repository &&
-          periodData.repository &&
-          route.repository.toLowerCase() !==
-            periodData.repository.canonicalName.toLowerCase()
-        ) {
-          window.history.replaceState(
-            null,
-            "",
-            buildPath(route, {
-              repository: periodData.repository.canonicalName,
-              cursor: route.cursor,
-            }),
-          );
-        }
         if (route.scope === "all") {
           setSession(
             await fetchJson<SessionResponse>("/api/auth/session", signal),
@@ -561,10 +563,29 @@ export function App() {
   );
 
   useEffect(() => {
+    if (hasCompleteBootstrap) return;
     const controller = new AbortController();
     void load(controller.signal);
     return () => controller.abort();
-  }, [load]);
+  }, [hasCompleteBootstrap, load]);
+
+  useEffect(() => {
+    if (
+      route.repository &&
+      data?.repository &&
+      route.repository.toLowerCase() !==
+        data.repository.canonicalName.toLowerCase()
+    ) {
+      window.history.replaceState(
+        null,
+        "",
+        buildPath(route, {
+          repository: data.repository.canonicalName,
+          cursor: route.cursor,
+        }),
+      );
+    }
+  }, [data, route]);
 
   const requestSync = () => {
     setSyncing(true);

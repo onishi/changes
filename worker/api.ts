@@ -17,6 +17,7 @@ import {
   shiftPeriodKey,
 } from "./lib/time";
 import { createCommitLogUrl } from "./records";
+import type { PeriodResponse } from "../src/types";
 
 const PAGE_SIZE = 50;
 const cursorSchema = z.object({
@@ -89,7 +90,13 @@ export async function getPeriodRecords(options: {
   periodKey: string;
   repositoryName?: string;
   cursor?: string | null;
-}): Promise<Record<string, unknown>> {
+  pageSize?: number;
+  includeCommits?: boolean;
+}): Promise<PeriodResponse> {
+  const pageSize = Math.min(
+    Math.max(options.pageSize ?? PAGE_SIZE, 1),
+    PAGE_SIZE,
+  );
   const bounds = periodBoundsForRoute(options.periodType, options.periodKey);
   if (bounds.endExclusive <= DATA_CUTOFF_INSTANT) {
     throw new Error(
@@ -151,13 +158,13 @@ export async function getPeriodRecords(options: {
        ORDER BY cr.last_committed_at DESC, cr.repository_id ASC
        LIMIT ?`,
   )
-    .bind(...bindings, PAGE_SIZE + 1)
+    .bind(...bindings, pageSize + 1)
     .all<RecordWithRepository>();
 
-  const hasNextPage = recordsResult.results.length > PAGE_SIZE;
-  const records = recordsResult.results.slice(0, PAGE_SIZE);
+  const hasNextPage = recordsResult.results.length > pageSize;
+  const records = recordsResult.results.slice(0, pageSize);
   const commitsByRecord = new Map<string, CommitRow[]>();
-  if (records.length > 0) {
+  if (options.includeCommits !== false && records.length > 0) {
     const placeholders = records.map(() => "?").join(", ");
     const commitsResult = await options.env.DB.prepare(
       `SELECT crc.change_record_id, c.repository_id, c.oid, c.message_headline,
@@ -243,7 +250,7 @@ export async function getPeriodRecords(options: {
     scope: options.scope,
     repository: repository
       ? {
-          requestedName: options.repositoryName,
+          requestedName: options.repositoryName ?? repository.name,
           canonicalName: repository.name,
         }
       : null,

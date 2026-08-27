@@ -1,10 +1,16 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import type { BootstrapData } from "../src/types";
 import { app } from "../worker/app";
+import { serializeBootstrap } from "../worker/bootstrap";
+
+const shell = `<!doctype html><html><head><title>changes</title></head><body><div id="root"></div></body></html>`;
 
 function testEnv(): Env {
   return {
     DB: env.DB,
+    JOBS: env.JOBS,
+    AI: env.AI,
     APP_ORIGIN: "https://changes.wagaya.org",
     GITHUB_OWNER: "onishi",
     GITHUB_CLIENT_ID: "client-id",
@@ -15,7 +21,27 @@ function testEnv(): Env {
       "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----",
     ALLOWED_GITHUB_USER_ID: "14186",
     SESSION_SECRET: "a-session-secret-that-is-at-least-32-bytes-long",
-  } as Env;
+    ASSETS: {
+      fetch: () =>
+        Promise.resolve(
+          new Response(shell, {
+            headers: { "Content-Type": "text/html; charset=utf-8" },
+          }),
+        ),
+      connect: () => {
+        throw new Error("Socket connections are not used in this test.");
+      },
+    },
+  };
+}
+
+function extractBootstrap(html: string): BootstrapData {
+  const prefix = "window.__CHANGES_BOOTSTRAP__=";
+  const start = html.indexOf(prefix);
+  const end = html.indexOf(";</script>", start);
+  expect(start).toBeGreaterThan(-1);
+  expect(end).toBeGreaterThan(start);
+  return JSON.parse(html.slice(start + prefix.length, end)) as BootstrapData;
 }
 
 describe("HTTP access boundaries", () => {
@@ -74,5 +100,48 @@ describe("HTTP access boundaries", () => {
       testEnv(),
     );
     expect(response.status).toBe(401);
+  });
+
+  it("embeds overview data directly in the public HTML shell", async () => {
+    const response = await app.request("/", {}, testEnv());
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toContain("public");
+
+    const bootstrap = extractBootstrap(await response.text());
+    expect(bootstrap.path).toBe("/");
+    expect(bootstrap.overviewData).not.toBeNull();
+    expect(bootstrap.periodData).toBeNull();
+    expect(bootstrap.error).toBeNull();
+  });
+
+  it("embeds period data and canonicalizes old page routes", async () => {
+    const response = await app.request("/daily/2026-08-20", {}, testEnv());
+    const bootstrap = extractBootstrap(await response.text());
+    expect(bootstrap.periodData?.period.key).toBe("2026-08-20");
+    expect(bootstrap.repositories).toEqual([]);
+
+    const oldRoute = await app.request(
+      "https://changes.wagaya.org/daily/2026-04-30",
+      {},
+      testEnv(),
+    );
+    expect(oldRoute.status).toBe(302);
+    expect(oldRoute.headers.get("Location")).toBe(
+      "https://changes.wagaya.org/daily/2026-05-01",
+    );
+  });
+
+  it("escapes script-closing content in bootstrap JSON", () => {
+    const encoded = serializeBootstrap({
+      path: "</script>",
+      periodData: null,
+      overviewData: null,
+      repositories: [],
+      session: null,
+      error: "line\u2028separator",
+    });
+    expect(encoded).not.toContain("</script>");
+    expect(encoded).toContain("\\u003c/script>");
+    expect(encoded).toContain("\\u2028");
   });
 });

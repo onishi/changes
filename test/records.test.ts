@@ -134,11 +134,7 @@ describe("change record aggregation and public boundary", () => {
       periodType: "daily",
       periodKey: "2026-08-20",
     });
-    const records = result.records as Array<{
-      commitCount: number;
-      commits: unknown[];
-      commitLogUrl: string;
-    }>;
+    const records = result.records;
     expect(records).toHaveLength(1);
     expect(records[0]?.commitCount).toBe(2);
     expect(records[0]?.commits).toHaveLength(2);
@@ -151,6 +147,16 @@ describe("change record aggregation and public boundary", () => {
     expect(commitLogUrl.searchParams.get("until")).toBe(
       "2026-08-20T14:59:59.000Z",
     );
+
+    const preview = await getPeriodRecords({
+      env: testEnv(),
+      scope: "public",
+      periodType: "daily",
+      periodKey: "2026-08-20",
+      pageSize: 3,
+      includeCommits: false,
+    });
+    expect(preview.records[0]?.commits).toEqual([]);
   });
 
   it("keeps only cutoff-and-later commits in the boundary week", async () => {
@@ -182,11 +188,7 @@ describe("change record aggregation and public boundary", () => {
       periodType: "weekly",
       periodKey: "2026-04-26",
     });
-    const records = result.records as Array<{
-      commitCount: number;
-      commits: Array<{ oid: string }>;
-      commitLogUrl: string;
-    }>;
+    const records = result.records;
     expect(records).toHaveLength(1);
     expect(records[0]?.commitCount).toBe(1);
     expect(records[0]?.commits.map((commit) => commit.oid)).toEqual([
@@ -262,15 +264,11 @@ describe("change record aggregation and public boundary", () => {
       scope: "public",
       periodType: "daily",
       periodKey: "2026-08-20",
-      cursor: firstPage.nextCursor as string,
+      cursor: firstPage.nextCursor,
     });
     expect(secondPage.records).toHaveLength(1);
-    const firstIds = (firstPage.records as Array<{ id: string }>).map(
-      (record) => record.id,
-    );
-    const secondIds = (secondPage.records as Array<{ id: string }>).map(
-      (record) => record.id,
-    );
+    const firstIds = firstPage.records.map((record) => record.id);
+    const secondIds = secondPage.records.map((record) => record.id);
     expect(new Set([...firstIds, ...secondIds]).size).toBe(51);
   });
 
