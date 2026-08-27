@@ -57,6 +57,14 @@ describe("HTTP access boundaries", () => {
     );
     expect(period.status).toBe(200);
     expect(period.headers.get("Cache-Control")).toContain("public");
+
+    const latestDaily = await app.request(
+      "/api/public/latest-daily",
+      {},
+      testEnv(),
+    );
+    expect(latestDaily.status).toBe(200);
+    await expect(latestDaily.json()).resolves.toEqual({ records: [] });
   });
 
   it("rejects periods that end before the data cutoff", async () => {
@@ -109,7 +117,7 @@ describe("HTTP access boundaries", () => {
 
     const bootstrap = extractBootstrap(await response.text());
     expect(bootstrap.path).toBe("/");
-    expect(bootstrap.overviewData).not.toBeNull();
+    expect(bootstrap.latestDailyData).not.toBeNull();
     expect(bootstrap.periodData).toBeNull();
     expect(bootstrap.error).toBeNull();
   });
@@ -135,7 +143,7 @@ describe("HTTP access boundaries", () => {
     const encoded = serializeBootstrap({
       path: "</script>",
       periodData: null,
-      overviewData: null,
+      latestDailyData: null,
       repositories: [],
       session: null,
       error: "line\u2028separator",

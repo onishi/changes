@@ -6,7 +6,11 @@ import {
   isSameOrigin,
   logout,
 } from "./auth";
-import { getPeriodRecords, listRepositories } from "./api";
+import {
+  getLatestDailyRecords,
+  getPeriodRecords,
+  listRepositories,
+} from "./api";
 import type { QueueMessage, Scope, SessionRow } from "./domain";
 import { isPeriodType } from "./records";
 import { serveBootstrappedShell } from "./bootstrap";
@@ -101,6 +105,16 @@ app.get("/api/public/repositories", async (context) => {
   return context.json({
     repositories: await listRepositories(context.env.DB, "public"),
   });
+});
+app.get("/api/public/latest-daily", async (context) => {
+  context.header("Cache-Control", "public, max-age=60, s-maxage=300");
+  return context.json(
+    await getLatestDailyRecords({
+      env: context.env,
+      scope: "public",
+      limit: 5,
+    }),
+  );
 });
 app.get("/api/all/repositories", async (context) =>
   context.json({ repositories: await listRepositories(context.env.DB, "all") }),

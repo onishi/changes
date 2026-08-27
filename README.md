@@ -415,6 +415,7 @@ GitHub コミットログ URL は永続化せず、owner、repository、period s
 
 ```text
 GET  /api/public/periods/:period/:date
+GET  /api/public/latest-daily
 GET  /api/public/repositories
 GET  /api/public/repositories/:repo/periods/:period/:date
 

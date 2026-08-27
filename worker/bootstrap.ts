@@ -1,13 +1,11 @@
 import type { SessionRow } from "./domain";
-import { getPeriodRecords, listRepositories } from "./api";
-import { currentPeriodKey } from "./lib/time";
+import {
+  getLatestDailyRecords,
+  getPeriodRecords,
+  listRepositories,
+} from "./api";
 import { parseRoute } from "../src/routes";
-import type {
-  BootstrapData,
-  PeriodResponse,
-  PeriodType,
-  RouteState,
-} from "../src/types";
+import type { BootstrapData, RouteState } from "../src/types";
 
 function requestPath(request: Request): string {
   const url = new URL(request.url);
@@ -25,43 +23,11 @@ function emptyBootstrap(request: Request): BootstrapData {
   return {
     path: requestPath(request),
     periodData: null,
-    overviewData: null,
+    latestDailyData: null,
     repositories: [],
     session: null,
     error: null,
   };
-}
-
-async function loadOverview(
-  env: Env,
-): Promise<Record<PeriodType, PeriodResponse>> {
-  const [daily, weekly, monthly] = await Promise.all([
-    getPeriodRecords({
-      env,
-      scope: "public",
-      periodType: "daily",
-      periodKey: currentPeriodKey("daily"),
-      pageSize: 3,
-      includeCommits: false,
-    }),
-    getPeriodRecords({
-      env,
-      scope: "public",
-      periodType: "weekly",
-      periodKey: currentPeriodKey("weekly"),
-      pageSize: 3,
-      includeCommits: false,
-    }),
-    getPeriodRecords({
-      env,
-      scope: "public",
-      periodType: "monthly",
-      periodKey: currentPeriodKey("monthly"),
-      pageSize: 3,
-      includeCommits: false,
-    }),
-  ]);
-  return { daily, weekly, monthly };
 }
 
 async function loadBootstrapData(
@@ -82,7 +48,11 @@ async function loadBootstrapData(
     : null;
   try {
     if (route.isOverview) {
-      bootstrap.overviewData = await loadOverview(env);
+      bootstrap.latestDailyData = await getLatestDailyRecords({
+        env,
+        scope: "public",
+        limit: 5,
+      });
       return bootstrap;
     }
 

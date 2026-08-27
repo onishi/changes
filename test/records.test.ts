@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { getPeriodRecords } from "../worker/api";
+import { getLatestDailyRecords, getPeriodRecords } from "../worker/api";
 import type { RepositoryRow } from "../worker/domain";
 import { rebuildAffectedRecords } from "../worker/records";
 
@@ -87,6 +87,47 @@ function testEnv(): Env {
 }
 
 describe("change record aggregation and public boundary", () => {
+  it("returns only the five newest daily records across dates", async () => {
+    await insertRepository(publicRepository);
+    const committedAt = Array.from(
+      { length: 6 },
+      (_, index) =>
+        `2026-08-${String(15 + index).padStart(2, "0")}T01:00:00.000Z`,
+    );
+    await Promise.all(
+      committedAt.map((timestamp, index) =>
+        insertCommit(
+          publicRepository,
+          `daily-${String(index)}`,
+          timestamp,
+          `Daily change ${String(index)}`,
+        ),
+      ),
+    );
+    await rebuildAffectedRecords(testEnv(), publicRepository, committedAt);
+
+    const result = await getLatestDailyRecords({
+      env: testEnv(),
+      scope: "public",
+      limit: 5,
+    });
+
+    expect(result.records).toHaveLength(5);
+    expect(result.records.map((record) => record.periodKey)).toEqual([
+      "2026-08-20",
+      "2026-08-19",
+      "2026-08-18",
+      "2026-08-17",
+      "2026-08-16",
+    ]);
+    expect(
+      result.records.every((record) => record.periodType === "daily"),
+    ).toBe(true);
+    expect(result.records.every((record) => record.commits.length === 0)).toBe(
+      true,
+    );
+  });
+
   it("rejects future periods and malformed cursors", async () => {
     await expect(
       getPeriodRecords({

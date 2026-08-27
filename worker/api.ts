@@ -17,7 +17,11 @@ import {
   shiftPeriodKey,
 } from "./lib/time";
 import { createCommitLogUrl } from "./records";
-import type { PeriodResponse } from "../src/types";
+import type {
+  ChangeRecord,
+  LatestDailyResponse,
+  PeriodResponse,
+} from "../src/types";
 
 const PAGE_SIZE = 50;
 const cursorSchema = z.object({
@@ -81,6 +85,69 @@ export async function listRepositories(
     )
     .all<RepositoryRow>();
   return result.results;
+}
+
+function changeRecordFromRow(
+  record: RecordWithRepository,
+  githubOwner: string,
+  commits: CommitRow[] = [],
+): ChangeRecord {
+  const bounds = periodBoundsForRoute(record.period_type, record.period_key);
+  return {
+    id: record.id,
+    repository: {
+      name: record.repository_name,
+      fullName: record.repository_full_name,
+      url: record.repository_url,
+      visibility: record.repository_visibility,
+    },
+    periodType: record.period_type,
+    periodKey: record.period_key,
+    commitCount: record.commit_count,
+    firstCommittedAt: record.first_committed_at,
+    lastCommittedAt: record.last_committed_at,
+    summary: {
+      text: record.summary_text,
+      status: record.summary_status,
+      model: record.summary_model,
+      generatedAt: record.generated_at,
+    },
+    commitLogUrl: createCommitLogUrl(
+      { html_url: record.repository_url },
+      githubOwner,
+      bounds,
+    ),
+    commits,
+  };
+}
+
+export async function getLatestDailyRecords(options: {
+  env: Env;
+  scope: Scope;
+  limit?: number;
+}): Promise<LatestDailyResponse> {
+  const limit = Math.min(Math.max(options.limit ?? 5, 1), 20);
+  const visibility =
+    options.scope === "public" ? "AND r.visibility = 'public'" : "";
+  const result = await options.env.DB.prepare(
+    `SELECT cr.*, r.name AS repository_name, r.full_name AS repository_full_name,
+            r.html_url AS repository_url, r.visibility AS repository_visibility,
+            r.default_branch
+     FROM change_records cr
+     JOIN repositories r ON r.id = cr.repository_id
+     WHERE cr.scope = ? AND cr.period_type = 'daily'
+       AND cr.period_start >= ? AND r.deleted_at IS NULL ${visibility}
+     ORDER BY cr.last_committed_at DESC, cr.repository_id ASC
+     LIMIT ?`,
+  )
+    .bind(options.scope, DATA_CUTOFF_INSTANT, limit)
+    .all<RecordWithRepository>();
+
+  return {
+    records: result.results.map((record) =>
+      changeRecordFromRow(record, options.env.GITHUB_OWNER),
+    ),
+  };
 }
 
 export async function getPeriodRecords(options: {
@@ -269,32 +336,13 @@ export async function getPeriodRecords(options: {
       startedAt: latestRun?.started_at ?? null,
       completedAt: latestRun?.completed_at ?? null,
     },
-    records: records.map((record) => ({
-      id: record.id,
-      repository: {
-        name: record.repository_name,
-        fullName: record.repository_full_name,
-        url: record.repository_url,
-        visibility: record.repository_visibility,
-      },
-      periodType: record.period_type,
-      periodKey: record.period_key,
-      commitCount: record.commit_count,
-      firstCommittedAt: record.first_committed_at,
-      lastCommittedAt: record.last_committed_at,
-      summary: {
-        text: record.summary_text,
-        status: record.summary_status,
-        model: record.summary_model,
-        generatedAt: record.generated_at,
-      },
-      commitLogUrl: createCommitLogUrl(
-        { html_url: record.repository_url },
+    records: records.map((record) =>
+      changeRecordFromRow(
+        record,
         options.env.GITHUB_OWNER,
-        bounds,
+        commitsByRecord.get(record.id) ?? [],
       ),
-      commits: commitsByRecord.get(record.id) ?? [],
-    })),
+    ),
     nextCursor,
   };
 }

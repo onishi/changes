@@ -11,6 +11,7 @@ import { dataCutoffPeriodKey } from "../shared/data-cutoff";
 import type {
   BootstrapData,
   ChangeRecord,
+  LatestDailyResponse,
   PeriodResponse,
   PeriodType,
   Repository,
@@ -23,10 +24,6 @@ const periodLabels: Record<PeriodType, string> = {
   weekly: "Weekly",
   monthly: "Monthly",
 };
-
-const overviewPeriods: PeriodType[] = ["daily", "weekly", "monthly"];
-
-type OverviewData = Record<PeriodType, PeriodResponse>;
 
 const dateFormatter = new Intl.DateTimeFormat("ja-JP", {
   timeZone: "Asia/Tokyo",
@@ -125,89 +122,69 @@ function SyncNote({ data }: { data: PeriodResponse }) {
   );
 }
 
-function OverviewCard({
+function LatestDaily({
   data,
-  period,
   route,
 }: {
-  data: PeriodResponse;
-  period: PeriodType;
+  data: LatestDailyResponse;
   route: RouteState;
 }) {
-  const detailPath = buildPath(route, {
-    period,
-    key: data.period.key,
-    repository: null,
-    cursor: null,
-  });
-  const visibleRecords = data.records.slice(0, 3);
-
+  const latestKey = data.records[0]?.periodKey ?? currentPeriodKey("daily");
   return (
-    <article className={`overview-card overview-${period}`}>
-      <header className="overview-card-header">
+    <section className="daily-feed" aria-labelledby="daily-feed-title">
+      <header className="daily-feed-header">
         <div>
-          <p className="section-label">{periodLabels[period]}</p>
-          <h2>{formatPeriod(data)}</h2>
+          <p className="section-label">Daily</p>
+          <h1 id="daily-feed-title">最新の変更</h1>
         </div>
-        <dl className="overview-stats">
-          <div>
-            <dt>Commits</dt>
-            <dd>{data.stats.commit_count}</dd>
-          </div>
-          <div>
-            <dt>Repos</dt>
-            <dd>{data.stats.repository_count}</dd>
-          </div>
-        </dl>
+        <p>リポジトリごとの日次ログから、新しい5件を表示</p>
       </header>
 
-      <div className="overview-records">
-        {visibleRecords.length === 0 ? (
-          <p className="overview-empty">この期間の変更はありません。</p>
+      <div className="daily-feed-list">
+        {data.records.length === 0 ? (
+          <p className="daily-feed-empty">変更履歴はまだありません。</p>
         ) : (
-          visibleRecords.map((record) => (
-            <article className="overview-record" key={record.id}>
-              <h3>
-                <a
-                  href={buildPath(route, {
-                    period,
-                    key: data.period.key,
-                    repository: record.repository.name,
-                    cursor: null,
-                  })}
-                >
-                  {record.repository.name}
-                </a>
-              </h3>
-              <span>{record.commitCount} commits</span>
+          data.records.map((record) => (
+            <a
+              className="daily-feed-item"
+              href={buildPath(route, {
+                period: "daily",
+                key: record.periodKey,
+                repository: record.repository.name,
+                cursor: null,
+              })}
+              key={record.id}
+            >
+              <div className="daily-feed-meta">
+                <time dateTime={record.periodKey}>
+                  {dateFormatter.format(
+                    new Date(`${record.periodKey}T00:00:00+09:00`),
+                  )}
+                </time>
+                <span>{record.commitCount} commits</span>
+              </div>
+              <h2>{record.repository.name}</h2>
               <p>{summaryPreview(record)}</p>
-            </article>
+              <span className="daily-feed-arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
           ))
         )}
       </div>
 
-      <a className="overview-detail-link" href={detailPath}>
-        {periodLabels[period]} の詳細を見る
-        {data.stats.repository_count > visibleRecords.length
-          ? ` · ほか ${String(data.stats.repository_count - visibleRecords.length)} 件`
-          : ""}
+      <a
+        className="daily-feed-more"
+        href={buildPath(route, {
+          period: "daily",
+          key: latestKey,
+          repository: null,
+          cursor: null,
+        })}
+      >
+        Daily の一覧を見る
         <span aria-hidden="true"> →</span>
       </a>
-    </article>
-  );
-}
-
-function Overview({ data, route }: { data: OverviewData; route: RouteState }) {
-  return (
-    <section className="overview-grid" aria-label="最近の変更サマリ">
-      {overviewPeriods.map((period) => (
-        <OverviewCard
-          data={data[period]}
-          key={period}
-          period={period}
-          route={route}
-        />
-      ))}
     </section>
   );
 }
@@ -480,14 +457,13 @@ export function App() {
     return initial?.path === path ? initial : null;
   }, []);
   const hasCompleteBootstrap = route.isOverview
-    ? Boolean(bootstrap?.overviewData || bootstrap?.error)
+    ? Boolean(bootstrap?.latestDailyData || bootstrap?.error)
     : Boolean(bootstrap?.periodData || bootstrap?.error);
   const [data, setData] = useState<PeriodResponse | null>(
     bootstrap?.periodData ?? null,
   );
-  const [overviewData, setOverviewData] = useState<OverviewData | null>(
-    bootstrap?.overviewData ?? null,
-  );
+  const [latestDailyData, setLatestDailyData] =
+    useState<LatestDailyResponse | null>(bootstrap?.latestDailyData ?? null);
   const [repositories, setRepositories] = useState<Repository[]>(
     bootstrap?.repositories ?? [],
   );
@@ -503,33 +479,12 @@ export function App() {
       const scope = route.scope === "all" ? "all" : "public";
       try {
         if (route.isOverview) {
-          const [daily, weekly, monthly] = await Promise.all([
-            fetchJson<PeriodResponse>(
-              apiPath({
-                ...route,
-                period: "daily",
-                key: currentPeriodKey("daily"),
-              }),
+          setLatestDailyData(
+            await fetchJson<LatestDailyResponse>(
+              "/api/public/latest-daily",
               signal,
             ),
-            fetchJson<PeriodResponse>(
-              apiPath({
-                ...route,
-                period: "weekly",
-                key: currentPeriodKey("weekly"),
-              }),
-              signal,
-            ),
-            fetchJson<PeriodResponse>(
-              apiPath({
-                ...route,
-                period: "monthly",
-                key: currentPeriodKey("monthly"),
-              }),
-              signal,
-            ),
-          ]);
-          setOverviewData({ daily, weekly, monthly });
+          );
           return;
         }
 
@@ -624,8 +579,8 @@ export function App() {
             </button>
           </section>
         ) : route.isOverview ? (
-          overviewData ? (
-            <Overview data={overviewData} route={route} />
+          latestDailyData ? (
+            <LatestDaily data={latestDailyData} route={route} />
           ) : (
             <Loading />
           )
