@@ -14,7 +14,6 @@ import type {
   LatestDailyResponse,
   PeriodResponse,
   PeriodType,
-  Repository,
   RouteState,
   SessionResponse,
 } from "./types";
@@ -25,10 +24,10 @@ const periodLabels: Record<PeriodType, string> = {
   monthly: "Monthly",
 };
 
-const dateFormatter = new Intl.DateTimeFormat("ja-JP", {
+const dateFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: "Asia/Tokyo",
   year: "numeric",
-  month: "long",
+  month: "short",
   day: "numeric",
   weekday: "short",
 });
@@ -46,12 +45,13 @@ const headingMonthFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
 });
 
-const timeFormatter = new Intl.DateTimeFormat("ja-JP", {
+const timeFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: "Asia/Tokyo",
-  month: "numeric",
+  month: "short",
   day: "numeric",
   hour: "2-digit",
   minute: "2-digit",
+  hour12: false,
 });
 
 async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
@@ -94,10 +94,11 @@ function Summary({ record }: { record: ChangeRecord }) {
     return <p className="record-summary">{record.summary.text}</p>;
   }
   const messages = {
-    pending: "AI サマリを生成待ちです。コミット一覧は閲覧できます。",
-    generating: "AI サマリを生成しています…",
-    failed: "AI サマリを生成できませんでした。次回の同期で再試行します。",
-    ready: "サマリはまだありません。",
+    pending: "AI summary pending. The commit list is available.",
+    generating: "Generating AI summary…",
+    failed:
+      "Could not generate the AI summary. It will retry on the next sync.",
+    ready: "No summary yet.",
   };
   return (
     <p className={`summary-state summary-${record.summary.status}`}>
@@ -111,9 +112,9 @@ function summaryPreview(record: ChangeRecord): string {
     return record.summary.text;
   }
   if (record.summary.status === "failed") {
-    return "AI サマリを生成できませんでした。";
+    return "Could not generate the AI summary.";
   }
-  return "AI サマリを生成中です。";
+  return "Generating AI summary…";
 }
 
 function SyncNote({ data }: { data: PeriodResponse }) {
@@ -121,12 +122,12 @@ function SyncNote({ data }: { data: PeriodResponse }) {
     <p className={`sync-note sync-${data.sync.status}`}>
       <span aria-hidden="true" />
       {data.sync.status === "running"
-        ? "GitHub の変更を同期しています"
+        ? "Syncing changes from GitHub"
         : data.sync.status === "failed"
-          ? "直近の同期に失敗しました。前回成功時のデータを表示しています"
+          ? "Latest sync failed. Showing data from the last successful sync"
           : data.sync.lastSyncedAt
-            ? `最終同期 ${timeFormatter.format(new Date(data.sync.lastSyncedAt))}`
-            : "初回の GitHub 同期待ちです"}
+            ? `Last synced ${timeFormatter.format(new Date(data.sync.lastSyncedAt))}`
+            : "Waiting for the first GitHub sync"}
     </p>
   );
 }
@@ -146,12 +147,12 @@ function LatestDaily({
           <p className="section-label">Daily</p>
           <h1 id="daily-feed-title">Latest changes</h1>
         </div>
-        <p>リポジトリごとの日次ログから、新しい5件を表示</p>
+        <p>The five latest entries from repository daily logs</p>
       </header>
 
       <div className="daily-feed-list">
         {data.records.length === 0 ? (
-          <p className="daily-feed-empty">変更履歴はまだありません。</p>
+          <p className="daily-feed-empty">No changes yet.</p>
         ) : (
           data.records.map((record) => (
             <a
@@ -191,7 +192,7 @@ function LatestDaily({
           cursor: null,
         })}
       >
-        Daily の一覧を見る
+        View Daily changelog
         <span aria-hidden="true"> →</span>
       </a>
     </section>
@@ -234,7 +235,7 @@ function ChangeCard({
           target="_blank"
           rel="noreferrer noopener"
         >
-          GitHub で期間ログを見る <span aria-hidden="true">↗</span>
+          View period on GitHub <span aria-hidden="true">↗</span>
         </a>
       </header>
 
@@ -242,7 +243,7 @@ function ChangeCard({
 
       <details className="commit-details">
         <summary>
-          <span>コミット一覧</span>
+          <span>Commit list</span>
           <span className="commit-range">
             {timeFormatter.format(new Date(record.firstCommittedAt))} —{" "}
             {timeFormatter.format(new Date(record.lastCommittedAt))}
@@ -272,13 +273,11 @@ function ChangeCard({
 
 function Header({
   route,
-  repositories,
   session,
   syncing,
   onSync,
 }: {
   route: RouteState;
-  repositories: Repository[];
   session: SessionResponse | null;
   syncing: boolean;
   onSync: () => void;
@@ -286,12 +285,6 @@ function Header({
   const onDateChange = (value: string) => {
     window.location.href = buildPath(route, {
       key: periodKeyForDate(route.period, value),
-      cursor: null,
-    });
-  };
-  const onRepositoryChange = (value: string) => {
-    window.location.href = buildPath(route, {
-      repository: value || null,
       cursor: null,
     });
   };
@@ -306,7 +299,7 @@ function Header({
         <a className="brand" href="/">
           changes<span>.</span>
         </a>
-        <nav className="scope-nav" aria-label="公開範囲">
+        <nav className="scope-nav" aria-label="Visibility">
           <a
             aria-current={route.scope === "public" ? "page" : undefined}
             href={publicPath}
@@ -318,7 +311,7 @@ function Header({
             href={allPath}
           >
             All{" "}
-            <span className="lock" aria-label="認証が必要">
+            <span className="lock" aria-label="Authentication required">
               ⌁
             </span>
           </a>
@@ -333,11 +326,11 @@ function Header({
                 disabled={syncing}
                 onClick={onSync}
               >
-                {syncing ? "同期を依頼中…" : "今すぐ同期"}
+                {syncing ? "Requesting sync…" : "Sync now"}
               </button>
               <form action="/api/auth/logout" method="post">
                 <button className="text-button" type="submit">
-                  サインアウト
+                  Sign out
                 </button>
               </form>
             </>
@@ -347,9 +340,9 @@ function Header({
 
       <section
         className={`controls${route.isOverview ? " controls-overview" : ""}`}
-        aria-label="表示条件"
+        aria-label="View options"
       >
-        <nav className="period-nav" aria-label="期間単位">
+        <nav className="period-nav" aria-label="Period">
           {(Object.keys(periodLabels) as PeriodType[]).map((period) => (
             <a
               key={period}
@@ -365,10 +358,10 @@ function Header({
             <label className="field">
               <span>
                 {route.period === "monthly"
-                  ? "月"
+                  ? "Month"
                   : route.period === "weekly"
-                    ? "週の日曜日"
-                    : "日付"}
+                    ? "Week starting Sunday"
+                    : "Date"}
               </span>
               <input
                 type={route.period === "monthly" ? "month" : "date"}
@@ -376,23 +369,6 @@ function Header({
                 value={route.key}
                 onChange={(event) => onDateChange(event.currentTarget.value)}
               />
-            </label>
-            <label className="field repository-field">
-              <span>リポジトリ</span>
-              <select
-                value={route.repository ?? ""}
-                onChange={(event) =>
-                  onRepositoryChange(event.currentTarget.value)
-                }
-              >
-                <option value="">すべてのリポジトリ</option>
-                {repositories.map((repository) => (
-                  <option key={repository.id} value={repository.name}>
-                    {repository.name}
-                    {repository.visibility !== "public" ? " · private" : ""}
-                  </option>
-                ))}
-              </select>
             </label>
           </>
         )}
@@ -414,10 +390,11 @@ function PeriodPager({
   );
   const nextDisabled = isFuturePeriod(route.period, data.period.key);
   return (
-    <nav className="period-pager" aria-label="前後の期間">
+    <nav className="period-pager" aria-label="Previous and next periods">
       {previousDisabled ? (
         <span aria-disabled="true">
-          <span aria-hidden="true">←</span> 前の{periodLabels[route.period]}
+          <span aria-hidden="true">←</span> Previous{" "}
+          {periodLabels[route.period]}
         </span>
       ) : (
         <a
@@ -426,16 +403,17 @@ function PeriodPager({
             cursor: null,
           })}
         >
-          <span aria-hidden="true">←</span> 前の{periodLabels[route.period]}
+          <span aria-hidden="true">←</span> Previous{" "}
+          {periodLabels[route.period]}
         </a>
       )}
       {nextDisabled ? (
         <span aria-disabled="true">
-          次の{periodLabels[route.period]} <span aria-hidden="true">→</span>
+          Next {periodLabels[route.period]} <span aria-hidden="true">→</span>
         </span>
       ) : (
         <a href={buildPath(route, { key: data.period.nextKey, cursor: null })}>
-          次の{periodLabels[route.period]} <span aria-hidden="true">→</span>
+          Next {periodLabels[route.period]} <span aria-hidden="true">→</span>
         </a>
       )}
     </nav>
@@ -448,7 +426,7 @@ function Loading() {
       <span />
       <span />
       <span />
-      <p>変更履歴を読み込んでいます</p>
+      <p>Loading changes</p>
     </div>
   );
 }
@@ -474,9 +452,6 @@ export function App() {
   );
   const [latestDailyData, setLatestDailyData] =
     useState<LatestDailyResponse | null>(bootstrap?.latestDailyData ?? null);
-  const [repositories, setRepositories] = useState<Repository[]>(
-    bootstrap?.repositories ?? [],
-  );
   const [session, setSession] = useState<SessionResponse | null>(
     bootstrap?.session ?? null,
   );
@@ -486,7 +461,6 @@ export function App() {
   const load = useCallback(
     async (signal?: AbortSignal) => {
       setError(null);
-      const scope = route.scope === "all" ? "all" : "public";
       try {
         if (route.isOverview) {
           setLatestDailyData(
@@ -498,29 +472,19 @@ export function App() {
           return;
         }
 
-        const requests: [
-          Promise<PeriodResponse>,
-          Promise<{ repositories: Repository[] }>,
-        ] = [
+        const [periodData, sessionData] = await Promise.all([
           fetchJson<PeriodResponse>(apiPath(route), signal),
-          fetchJson<{ repositories: Repository[] }>(
-            `/api/${scope}/repositories`,
-            signal,
-          ),
-        ];
-        const [periodData, repositoryData] = await Promise.all(requests);
+          route.scope === "all"
+            ? fetchJson<SessionResponse>("/api/auth/session", signal)
+            : Promise.resolve(null),
+        ]);
         setData(periodData);
-        setRepositories(repositoryData.repositories);
-        if (route.scope === "all") {
-          setSession(
-            await fetchJson<SessionResponse>("/api/auth/session", signal),
-          );
-        }
+        if (sessionData) setSession(sessionData);
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError")
           return;
         setError(
-          caught instanceof Error ? caught.message : "読み込みに失敗しました。",
+          caught instanceof Error ? caught.message : "Could not load changes.",
         );
       }
     },
@@ -556,13 +520,13 @@ export function App() {
     setSyncing(true);
     void fetch("/api/all/sync", { method: "POST" })
       .then((response) => {
-        if (!response.ok) throw new Error("同期を依頼できませんでした。");
+        if (!response.ok) throw new Error("Could not request a sync.");
       })
       .catch((caught: unknown) => {
         setError(
           caught instanceof Error
             ? caught.message
-            : "同期を依頼できませんでした。",
+            : "Could not request a sync.",
         );
       })
       .finally(() => setSyncing(false));
@@ -572,7 +536,6 @@ export function App() {
     <div className="app-shell">
       <Header
         route={route}
-        repositories={repositories}
         session={session}
         syncing={syncing}
         onSync={requestSync}
@@ -582,10 +545,10 @@ export function App() {
         {error ? (
           <section className="error-state" role="alert">
             <p className="section-label">Could not load</p>
-            <h1>変更履歴を読み込めませんでした</h1>
+            <h1>Could not load changes</h1>
             <p>{error}</p>
             <button type="button" onClick={() => void load()}>
-              もう一度試す
+              Try again
             </button>
           </section>
         ) : route.isOverview ? (
@@ -624,14 +587,12 @@ export function App() {
 
             <PeriodPager route={route} data={data} />
 
-            <section className="records" aria-label="変更レコード">
+            <section className="records" aria-label="Change records">
               {data.records.length === 0 ? (
                 <div className="empty-state">
                   <span aria-hidden="true">○</span>
-                  <h2>この期間の変更はありません</h2>
-                  <p>
-                    前後の期間を見るか、リポジトリの選択を解除してみてください。
-                  </p>
+                  <h2>No changes in this period</h2>
+                  <p>Try the previous or next period.</p>
                 </div>
               ) : (
                 data.records.map((record) => (
@@ -641,13 +602,13 @@ export function App() {
             </section>
 
             {(route.cursor || data.nextCursor) && (
-              <nav className="record-pager" aria-label="変更レコードのページ">
+              <nav className="record-pager" aria-label="Change record pages">
                 {route.cursor && (
-                  <a href={buildPath(route, { cursor: null })}>最初の50件へ</a>
+                  <a href={buildPath(route, { cursor: null })}>First 50</a>
                 )}
                 {data.nextCursor && (
                   <a href={buildPath(route, { cursor: data.nextCursor })}>
-                    次の50件を見る →
+                    View next 50 →
                   </a>
                 )}
               </nav>

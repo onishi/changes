@@ -101,7 +101,6 @@ export interface BootstrapData {
   path: string;
   periodData: PeriodResponse | null;
   latestDailyData: LatestDailyResponse | null;
-  repositories: Repository[];
   session: SessionResponse | null;
   error: string | null;
 }

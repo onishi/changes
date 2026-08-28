@@ -126,7 +126,6 @@ describe("HTTP access boundaries", () => {
     const response = await app.request("/daily/2026-08-20", {}, testEnv());
     const bootstrap = extractBootstrap(await response.text());
     expect(bootstrap.periodData?.period.key).toBe("2026-08-20");
-    expect(bootstrap.repositories).toEqual([]);
 
     const oldRoute = await app.request(
       "https://changes.wagaya.org/daily/2026-04-30",
@@ -144,7 +143,6 @@ describe("HTTP access boundaries", () => {
       path: "</script>",
       periodData: null,
       latestDailyData: null,
-      repositories: [],
       session: null,
       error: "line\u2028separator",
     });

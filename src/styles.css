@@ -143,7 +143,7 @@ summary:focus-visible {
 
 .controls {
   display: grid;
-  grid-template-columns: 1fr auto minmax(200px, 0.65fr);
+  grid-template-columns: 1fr minmax(180px, 260px);
   align-items: end;
   gap: 36px;
   padding: 24px 4vw;
@@ -200,8 +200,7 @@ summary:focus-visible {
   text-transform: uppercase;
 }
 
-.field input,
-.field select {
+.field input {
   width: 100%;
   min-height: 39px;
   border: 0;

@@ -1,9 +1,5 @@
 import type { SessionRow } from "./domain";
-import {
-  getLatestDailyRecords,
-  getPeriodRecords,
-  listRepositories,
-} from "./api";
+import { getLatestDailyRecords, getPeriodRecords } from "./api";
 import { parseRoute } from "../src/routes";
 import type { BootstrapData, RouteState } from "../src/types";
 
@@ -24,7 +20,6 @@ function emptyBootstrap(request: Request): BootstrapData {
     path: requestPath(request),
     periodData: null,
     latestDailyData: null,
-    repositories: [],
     session: null,
     error: null,
   };
@@ -56,22 +51,17 @@ async function loadBootstrapData(
       return bootstrap;
     }
 
-    const [periodData, repositories] = await Promise.all([
-      getPeriodRecords({
-        env,
-        scope: route.scope,
-        periodType: route.period,
-        periodKey: route.key,
-        repositoryName: route.repository ?? undefined,
-        cursor: route.cursor,
-      }),
-      listRepositories(env.DB, route.scope),
-    ]);
-    bootstrap.periodData = periodData;
-    bootstrap.repositories = repositories;
+    bootstrap.periodData = await getPeriodRecords({
+      env,
+      scope: route.scope,
+      periodType: route.period,
+      periodKey: route.key,
+      repositoryName: route.repository ?? undefined,
+      cursor: route.cursor,
+    });
   } catch (error) {
     bootstrap.error =
-      error instanceof Error ? error.message : "読み込みに失敗しました。";
+      error instanceof Error ? error.message : "Could not load changes.";
   }
   return bootstrap;
 }
