@@ -215,7 +215,7 @@ summary:focus-visible {
 main {
   width: min(1180px, calc(100% - 8vw));
   margin: 0 auto;
-  padding: 62px 0 74px;
+  padding: 44px 0 68px;
 }
 
 .hero {
@@ -223,7 +223,7 @@ main {
   justify-content: space-between;
   align-items: end;
   gap: 40px;
-  padding-bottom: 42px;
+  padding-bottom: 32px;
 }
 
 .daily-feed {
@@ -235,13 +235,13 @@ main {
   grid-template-columns: minmax(0, 1fr) minmax(220px, 360px);
   align-items: end;
   gap: 40px;
-  padding: 26px 0 34px;
+  padding: 16px 0 26px;
 }
 
 .daily-feed-header h1 {
   margin: 0;
   font-family: "Newsreader", Georgia, serif;
-  font-size: clamp(3rem, 7vw, 6.5rem);
+  font-size: clamp(2.4rem, 4.5vw, 4.5rem);
   font-weight: 400;
   letter-spacing: -0.06em;
   line-height: 0.92;
@@ -351,7 +351,7 @@ main {
   max-width: 850px;
   margin: 0;
   font-family: "Newsreader", Georgia, serif;
-  font-size: clamp(2.8rem, 6vw, 6rem);
+  font-size: clamp(2.2rem, 4vw, 4rem);
   font-weight: 400;
   letter-spacing: -0.055em;
   line-height: 0.95;
@@ -752,11 +752,11 @@ footer {
 
   main {
     width: min(100% - 32px, 1180px);
-    padding-top: 42px;
+    padding-top: 32px;
   }
 
   .hero h1 {
-    font-size: 2.7rem;
+    font-size: 2.15rem;
     line-height: 1;
   }
 
@@ -766,7 +766,7 @@ footer {
   }
 
   .daily-feed-header h1 {
-    font-size: 3.5rem;
+    font-size: 2.7rem;
   }
 
   .daily-feed-item {

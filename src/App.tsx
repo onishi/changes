@@ -33,6 +33,19 @@ const dateFormatter = new Intl.DateTimeFormat("ja-JP", {
   weekday: "short",
 });
 
+const headingDateFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Asia/Tokyo",
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+});
+
+const headingMonthFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Asia/Tokyo",
+  year: "numeric",
+  month: "short",
+});
+
 const timeFormatter = new Intl.DateTimeFormat("ja-JP", {
   timeZone: "Asia/Tokyo",
   month: "numeric",
@@ -69,15 +82,11 @@ function apiPath(route: RouteState): string {
 function formatPeriod(data: PeriodResponse): string {
   const start = new Date(data.period.start);
   const end = new Date(new Date(data.period.endExclusive).getTime() - 1000);
-  if (data.period.type === "daily") return dateFormatter.format(start);
+  if (data.period.type === "daily") return headingDateFormatter.format(start);
   if (data.period.type === "monthly") {
-    return new Intl.DateTimeFormat("ja-JP", {
-      timeZone: "Asia/Tokyo",
-      year: "numeric",
-      month: "long",
-    }).format(start);
+    return headingMonthFormatter.format(start);
   }
-  return `${dateFormatter.format(start)} — ${dateFormatter.format(end)}`;
+  return headingDateFormatter.formatRange(start, end);
 }
 
 function Summary({ record }: { record: ChangeRecord }) {
@@ -135,7 +144,7 @@ function LatestDaily({
       <header className="daily-feed-header">
         <div>
           <p className="section-label">Daily</p>
-          <h1 id="daily-feed-title">最新の変更</h1>
+          <h1 id="daily-feed-title">Latest changes</h1>
         </div>
         <p>リポジトリごとの日次ログから、新しい5件を表示</p>
       </header>
