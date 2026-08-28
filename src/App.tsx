@@ -336,53 +336,58 @@ function Header({
         </div>
       </header>
 
-      {!route.isOverview && (
-        <section className="controls" aria-label="表示条件">
-          <nav className="period-nav" aria-label="期間単位">
-            {(Object.keys(periodLabels) as PeriodType[]).map((period) => (
-              <a
-                key={period}
-                href={buildPath(route, { period, cursor: null })}
-                aria-current={route.period === period ? "page" : undefined}
-              >
-                {periodLabels[period]}
-              </a>
-            ))}
-          </nav>
-          <label className="field">
-            <span>
-              {route.period === "monthly"
-                ? "月"
-                : route.period === "weekly"
-                  ? "週の日曜日"
-                  : "日付"}
-            </span>
-            <input
-              type={route.period === "monthly" ? "month" : "date"}
-              min={dataCutoffPeriodKey(route.period)}
-              value={route.key}
-              onChange={(event) => onDateChange(event.currentTarget.value)}
-            />
-          </label>
-          <label className="field repository-field">
-            <span>リポジトリ</span>
-            <select
-              value={route.repository ?? ""}
-              onChange={(event) =>
-                onRepositoryChange(event.currentTarget.value)
-              }
+      <section
+        className={`controls${route.isOverview ? " controls-overview" : ""}`}
+        aria-label="表示条件"
+      >
+        <nav className="period-nav" aria-label="期間単位">
+          {(Object.keys(periodLabels) as PeriodType[]).map((period) => (
+            <a
+              key={period}
+              href={buildPath(route, { period, cursor: null })}
+              aria-current={route.period === period ? "page" : undefined}
             >
-              <option value="">すべてのリポジトリ</option>
-              {repositories.map((repository) => (
-                <option key={repository.id} value={repository.name}>
-                  {repository.name}
-                  {repository.visibility !== "public" ? " · private" : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-        </section>
-      )}
+              {periodLabels[period]}
+            </a>
+          ))}
+        </nav>
+        {!route.isOverview && (
+          <>
+            <label className="field">
+              <span>
+                {route.period === "monthly"
+                  ? "月"
+                  : route.period === "weekly"
+                    ? "週の日曜日"
+                    : "日付"}
+              </span>
+              <input
+                type={route.period === "monthly" ? "month" : "date"}
+                min={dataCutoffPeriodKey(route.period)}
+                value={route.key}
+                onChange={(event) => onDateChange(event.currentTarget.value)}
+              />
+            </label>
+            <label className="field repository-field">
+              <span>リポジトリ</span>
+              <select
+                value={route.repository ?? ""}
+                onChange={(event) =>
+                  onRepositoryChange(event.currentTarget.value)
+                }
+              >
+                <option value="">すべてのリポジトリ</option>
+                {repositories.map((repository) => (
+                  <option key={repository.id} value={repository.name}>
+                    {repository.name}
+                    {repository.visibility !== "public" ? " · private" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        )}
+      </section>
     </>
   );
 }

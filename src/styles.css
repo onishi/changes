@@ -151,6 +151,10 @@ summary:focus-visible {
   background: color-mix(in srgb, var(--card) 45%, transparent);
 }
 
+.controls-overview {
+  grid-template-columns: 1fr;
+}
+
 .period-nav {
   align-self: center;
   gap: 30px;
