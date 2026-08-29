@@ -24,8 +24,7 @@ type AppBindings = {
 export const app = new Hono<AppBindings>();
 
 // The bootstrap JSON is injected as an inline script, so it needs a per-request
-// nonce. Everything else the app loads is same-origin, apart from the Google
-// Fonts stylesheet and the font files it pulls.
+// nonce. Everything else the app loads is same-origin, fonts included.
 export function contentSecurityPolicy(nonce: string): string {
   return [
     "default-src 'self'",
@@ -34,8 +33,8 @@ export function contentSecurityPolicy(nonce: string): string {
     "frame-ancestors 'none'",
     "form-action 'self'",
     `script-src 'self' 'nonce-${nonce}'`,
-    "style-src 'self' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com",
+    "style-src 'self'",
+    "font-src 'self'",
     "img-src 'self' data:",
     "connect-src 'self'",
   ].join("; ");
