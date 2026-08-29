@@ -441,3 +441,7 @@ POST /api/webhooks/github
 - 日付計算はタイムゾーンと夏時間を考慮し、テストで境界値を確認すること
 
 開発の進め方とマイルストーンは [PLAN.md](./PLAN.md) を参照してください。
+
+## ライセンス
+
+[MIT License](./LICENSE) で公開しています。
