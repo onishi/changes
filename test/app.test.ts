@@ -159,8 +159,10 @@ describe("HTTP access boundaries", () => {
     // browsers enforce every Content-Security-Policy header they receive.
     expect(policy).not.toContain(",");
     expect(policy).toContain("frame-ancestors 'none'");
-    expect(policy).toContain("style-src 'self' https://fonts.googleapis.com");
-    expect(policy).toContain("font-src 'self' https://fonts.gstatic.com");
+    expect(policy).toContain("style-src 'self'");
+    expect(policy).toContain("font-src 'self'");
+    // Nothing the app loads is cross-origin now that the fonts are self-hosted.
+    expect(policy).not.toContain("https://");
 
     const api = await app.request("/api/health", {}, testEnv());
     expect(api.headers.get("Content-Security-Policy")).toContain(
