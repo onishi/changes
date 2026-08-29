@@ -444,6 +444,10 @@ POST /api/webhooks/github
 
 開発の進め方とマイルストーンは [PLAN.md](./PLAN.md) を参照してください。
 
+## セキュリティ
+
+脆弱性の報告方法と対象範囲は [SECURITY.md](./SECURITY.md) を参照してください。public issue ではなく GitHub の Private vulnerability reporting からご報告ください。
+
 ## ライセンス
 
 [MIT License](./LICENSE) で公開しています。
