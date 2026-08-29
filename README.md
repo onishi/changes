@@ -192,6 +192,7 @@ AI プロバイダーに private コードそのものは送信しません。�
 - セッション Cookie は `HttpOnly`、`Secure`、`SameSite=Lax` を基本とする
 - all ページは `Cache-Control: private, no-store` とし、`noindex` を付与する
 - Static Assets のレスポンスヘッダーは `public/_headers`、API と Worker 経由のレスポンスヘッダーは middleware で設定する
+- Content-Security-Policy はリクエストごとの nonce を発行し、middleware でヘッダーへ、HTMLRewriter で shell 内の script へ付与する。bootstrap JSON はインライン script として埋め込むため、`'unsafe-inline'` ではなく nonce で許可する。asset 側の nonce なしポリシーは Worker 経由のレスポンスから削除し、ブラウザが複数の CSP を同時に適用しないようにする
 - 認証切れ、権限変更、リポジトリの public/private 変更を次回同期時に反映する
 
 ## データ同期
