@@ -82,7 +82,7 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 - [x] GitHub App user authorization、installation、session の必須 secret 名を定義する
 - [x] `wrangler types` で binding の TypeScript 型を生成する
 - [x] test runner と CI をセットアップする
-- [ ] Workers Builds または GitHub Actions + Wrangler で preview / production pipeline を用意する
+- [x] GitHub Actions + Wrangler で production への自動デプロイを用意する（preview 環境は未整備）
 - [x] health check、構造化ログ、Workers Observability の基盤を追加する
 - [x] ログを event / ID / status 中心に限定し、token・secret・本文を出力しない
 

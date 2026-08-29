@@ -348,7 +348,18 @@ GitHub App 作成時の値は次のとおりです。
 5. `https://changes.wagaya.org` で public、認証、API、Cron、Queue の smoke test を行う
 6. 問題がある場合は Worker version を rollback し、DB migration は backward-compatible な手順で戻す
 
-main branch から production へのデプロイには Cloudflare Workers Builds または GitHub Actions + Wrangler を使用します。production への反映は、CI が成功し、D1 migration と secret / binding の準備が完了した場合だけ行います。
+main branch から production へのデプロイは GitHub Actions で自動化しています。`.github/workflows/ci.yml` の `deploy` job が `verify` job の成功を `needs` で待ち、`main` への push のときだけ実行されます。Pull Request では実行されません。
+
+job は D1 migration を適用してから `npm run deploy` で Worker と Static Assets を同じ release としてデプロイします。migration を先に適用するのは、新しいコードが新しいスキーマに依存する場合があるためです。`concurrency` で deploy の同時実行を禁止し、`cancel-in-progress: false` として実行中の deploy を中断しません。migration だけ適用されてコードが伴わない状態を避けるためです。
+
+必要な repository secret は次の2つです。Settings → Secrets and variables → Actions に登録します。
+
+| Secret                  | 用途                                                                              |
+| ----------------------- | --------------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`  | Workers と D1 を操作する API token                                                |
+| `CLOUDFLARE_ACCOUNT_ID` | 対象の Cloudflare account ID。`wrangler.jsonc` に `account_id` を書かないため必要 |
+
+secret が未設定の場合、deploy job は wrangler の認証エラーではなく、どの secret が足りないかを示して失敗します。手元から緊急にデプロイする場合は従来どおり `npm run deploy` が使えます。
 
 ### 運用監視
 
