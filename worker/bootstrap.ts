@@ -69,9 +69,19 @@ async function loadBootstrapData(
 function injectBootstrap(
   response: Response,
   bootstrap: BootstrapData,
+  nonce: string,
 ): Response {
-  const script = `<script>window.__CHANGES_BOOTSTRAP__=${serializeBootstrap(bootstrap)};</script>`;
+  const script = `<script nonce="${nonce}">window.__CHANGES_BOOTSTRAP__=${serializeBootstrap(bootstrap)};</script>`;
   return new HTMLRewriter()
+    .on("script", {
+      element(element) {
+        // The shell is our own build output, so every script it already carries
+        // is trusted. Nonce them rather than widening the policy: in production
+        // this is just the bundle tag, but in dev it also covers the inline
+        // React Refresh preamble that @vitejs/plugin-react injects.
+        element.setAttribute("nonce", nonce);
+      },
+    })
     .on("head", {
       element(element) {
         element.append(script, { html: true });
@@ -83,6 +93,7 @@ function injectBootstrap(
 export async function serveBootstrappedShell(options: {
   request: Request;
   env: Env;
+  nonce: string;
   session?: SessionRow | null;
 }): Promise<Response> {
   const url = new URL(options.request.url);
@@ -112,6 +123,7 @@ export async function serveBootstrappedShell(options: {
   const headers = new Headers(assetResponse.headers);
   headers.delete("Content-Length");
   headers.delete("ETag");
+  headers.delete("Content-Security-Policy");
   if (route.scope === "all") {
     headers.set("Cache-Control", "private, no-store");
     headers.set("X-Robots-Tag", "noindex, nofollow");
@@ -125,5 +137,6 @@ export async function serveBootstrappedShell(options: {
       headers,
     }),
     bootstrap,
+    options.nonce,
   );
 }

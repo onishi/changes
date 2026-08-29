@@ -4,7 +4,7 @@ import type { BootstrapData } from "../src/types";
 import { app } from "../worker/app";
 import { serializeBootstrap } from "../worker/bootstrap";
 
-const shell = `<!doctype html><html><head><title>changes</title></head><body><div id="root"></div></body></html>`;
+const shell = `<!doctype html><html><head><title>changes</title></head><body><div id="root"></div><script type="module" src="/assets/index.js"></script></body></html>`;
 
 function testEnv(): Env {
   return {
@@ -25,7 +25,11 @@ function testEnv(): Env {
       fetch: () =>
         Promise.resolve(
           new Response(shell, {
-            headers: { "Content-Type": "text/html; charset=utf-8" },
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+              "Content-Security-Policy":
+                "default-src 'self'; script-src 'self'",
+            },
           }),
         ),
       connect: () => {
@@ -136,6 +140,43 @@ describe("HTTP access boundaries", () => {
     expect(oldRoute.headers.get("Location")).toBe(
       "https://changes.wagaya.org/daily/2026-05-01",
     );
+  });
+
+  it("sets a nonce-based CSP that authorizes the inline bootstrap script", async () => {
+    const response = await app.request("/", {}, testEnv());
+    const policy = response.headers.get("Content-Security-Policy") ?? "";
+    const nonce = /script-src 'self' 'nonce-([\w-]+)'/u.exec(policy)?.[1];
+    expect(nonce).toBeTruthy();
+
+    const html = await response.text();
+    expect(html).toContain(`<script nonce="${nonce}">`);
+    // Both the bundle tag already in the shell and the injected bootstrap
+    // script must carry the nonce, or the page will not run under the policy.
+    expect(html.split(`nonce="${nonce}"`).length - 1).toBe(2);
+    expect(html).toContain('src="/assets/index.js"');
+
+    // The nonce-less policy from public/_headers must not survive next to it;
+    // browsers enforce every Content-Security-Policy header they receive.
+    expect(policy).not.toContain(",");
+    expect(policy).toContain("frame-ancestors 'none'");
+    expect(policy).toContain("style-src 'self' https://fonts.googleapis.com");
+    expect(policy).toContain("font-src 'self' https://fonts.gstatic.com");
+
+    const api = await app.request("/api/health", {}, testEnv());
+    expect(api.headers.get("Content-Security-Policy")).toContain(
+      "default-src 'self'",
+    );
+  });
+
+  it("issues a different nonce for every request", async () => {
+    const readNonce = (response: Response): string | undefined =>
+      /'nonce-([\w-]+)'/u.exec(
+        response.headers.get("Content-Security-Policy") ?? "",
+      )?.[1];
+    const first = readNonce(await app.request("/", {}, testEnv()));
+    const second = readNonce(await app.request("/", {}, testEnv()));
+    expect(first).toBeTruthy();
+    expect(first).not.toBe(second);
   });
 
   it("escapes script-closing content in bootstrap JSON", () => {

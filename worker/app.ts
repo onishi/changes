@@ -12,17 +12,38 @@ import {
   listRepositories,
 } from "./api";
 import type { QueueMessage, Scope, SessionRow } from "./domain";
+import { randomToken } from "./lib/crypto";
 import { isPeriodType } from "./records";
 import { serveBootstrappedShell } from "./bootstrap";
 
 type AppBindings = {
   Bindings: Env;
-  Variables: { session: SessionRow };
+  Variables: { session: SessionRow; cspNonce: string };
 };
 
 export const app = new Hono<AppBindings>();
 
+// The bootstrap JSON is injected as an inline script, so it needs a per-request
+// nonce. Everything else the app loads is same-origin, apart from the Google
+// Fonts stylesheet and the font files it pulls.
+export function contentSecurityPolicy(nonce: string): string {
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    `script-src 'self' 'nonce-${nonce}'`,
+    "style-src 'self' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+  ].join("; ");
+}
+
 app.use("*", async (context, next) => {
+  const nonce = randomToken(16);
+  context.set("cspNonce", nonce);
   await next();
   context.header("X-Content-Type-Options", "nosniff");
   context.header("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -30,6 +51,7 @@ app.use("*", async (context, next) => {
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=()",
   );
+  context.header("Content-Security-Policy", contentSecurityPolicy(nonce));
 });
 
 app.get("/api/health", (context) => context.json({ status: "ok" }));
@@ -149,6 +171,7 @@ app.post("/api/all/sync", async (context) => {
 async function servePrivateShell(
   request: Request,
   env: Env,
+  nonce: string,
 ): Promise<Response> {
   const session = await getSession(request, env);
   if (!session) {
@@ -156,32 +179,64 @@ async function servePrivateShell(
     login.searchParams.set("returnTo", new URL(request.url).pathname);
     return Response.redirect(login.toString(), 302);
   }
-  return serveBootstrappedShell({ request, env, session });
+  return serveBootstrappedShell({ request, env, session, nonce });
 }
 
-app.get("/all", (context) => servePrivateShell(context.req.raw, context.env));
-app.get("/all/*", (context) => servePrivateShell(context.req.raw, context.env));
+app.get("/all", (context) =>
+  servePrivateShell(context.req.raw, context.env, context.get("cspNonce")),
+);
+app.get("/all/*", (context) =>
+  servePrivateShell(context.req.raw, context.env, context.get("cspNonce")),
+);
 
 app.get("/", (context) =>
-  serveBootstrappedShell({ request: context.req.raw, env: context.env }),
+  serveBootstrappedShell({
+    request: context.req.raw,
+    env: context.env,
+    nonce: context.get("cspNonce"),
+  }),
 );
 app.get("/public", (context) =>
-  serveBootstrappedShell({ request: context.req.raw, env: context.env }),
+  serveBootstrappedShell({
+    request: context.req.raw,
+    env: context.env,
+    nonce: context.get("cspNonce"),
+  }),
 );
 app.get("/public/*", (context) =>
-  serveBootstrappedShell({ request: context.req.raw, env: context.env }),
+  serveBootstrappedShell({
+    request: context.req.raw,
+    env: context.env,
+    nonce: context.get("cspNonce"),
+  }),
 );
 app.get("/daily/*", (context) =>
-  serveBootstrappedShell({ request: context.req.raw, env: context.env }),
+  serveBootstrappedShell({
+    request: context.req.raw,
+    env: context.env,
+    nonce: context.get("cspNonce"),
+  }),
 );
 app.get("/weekly/*", (context) =>
-  serveBootstrappedShell({ request: context.req.raw, env: context.env }),
+  serveBootstrappedShell({
+    request: context.req.raw,
+    env: context.env,
+    nonce: context.get("cspNonce"),
+  }),
 );
 app.get("/monthly/*", (context) =>
-  serveBootstrappedShell({ request: context.req.raw, env: context.env }),
+  serveBootstrappedShell({
+    request: context.req.raw,
+    env: context.env,
+    nonce: context.get("cspNonce"),
+  }),
 );
 app.get("/repo/*", (context) =>
-  serveBootstrappedShell({ request: context.req.raw, env: context.env }),
+  serveBootstrappedShell({
+    request: context.req.raw,
+    env: context.env,
+    nonce: context.get("cspNonce"),
+  }),
 );
 
 app.all("/api/*", (context) => context.json({ error: "Not found" }, 404));
