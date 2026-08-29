@@ -181,7 +181,8 @@ describe("change record aggregation and public boundary", () => {
     expect(records[0]?.commits).toHaveLength(2);
 
     const commitLogUrl = new URL(records[0]?.commitLogUrl ?? "");
-    expect(commitLogUrl.searchParams.get("author")).toBe("onishi");
+    // Unfiltered by author, so the link shows the same commits the page does.
+    expect(commitLogUrl.searchParams.get("author")).toBeNull();
     expect(commitLogUrl.searchParams.get("since")).toBe(
       "2026-08-19T15:00:00.000Z",
     );

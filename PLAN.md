@@ -56,6 +56,7 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 - [x] `changes.wagaya.org` に競合する DNS record、Custom Domain、Worker route がないことを確認する
 - [ ] Workers AI の日本語要約品質とコストを検証し、初期 AI provider を確定する
 - [ ] タイムゾーン、同期対象期間、fork/archive の扱いを設定値として確定する（週は日曜日始まりに固定）
+- [x] 同期対象コミットの方針を確定する（owner 配下は全 author、merge commit は除外）
 - [ ] private メタデータを外部 AI へ送信する運用について確認する
 
 完了条件:
