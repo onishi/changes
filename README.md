@@ -357,7 +357,7 @@ main branch から production へのデプロイには Cloudflare Workers Builds
 - `summary_refreshes_enqueued`: prompt version が古い ready / failed 要約を Cron から再投入した件数。1回最大25件
 - `queue_message_failed`: Queue message の種別、attempt、retryable 判定、秘密値を含まないエラー概要
 
-AI 要約は100文字程度を目安とし、JSON Schema とアプリ側 schema の両方で80〜150文字に検証します。JSON の途中切れなどで失敗したレコードは failed のままコミット一覧を表示し、prompt version を更新したリリース後の Cron で古い ready / failed 要約を新しい version に限って再投入します。
+AI 要約は prompt で100文字程度・2〜3文を目安として指示し、schema は40〜300文字と余裕を持たせます。schema を目標値ぎりぎりに設定すると、JSON Mode の制約付き生成が上限で文字列を打ち切り、文が途中で終わった要約が生成されるためです。schema は文章量を制御する手段ではなく、異常な出力だけを弾く安全網として扱います。要約には期間やコミット件数を含めず、変更内容だけを記述します。JSON の途中切れなどで失敗したレコードは failed のままコミット一覧を表示し、prompt version を更新したリリース後の Cron で古い ready / failed 要約を新しい version に限って再投入します。
 
 ### Cloudflare 公式リファレンス
 

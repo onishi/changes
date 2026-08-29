@@ -114,13 +114,16 @@ describe("Workers AI summaries", () => {
     expect(contents[1]).toContain(
       "body: 選択した期間をURLへ反映し、前後期間への移動と再読み込み後の状態維持に対応した。",
     );
+    expect(contents[1]).toContain("repository: changes");
+    expect(contents[1]).not.toContain("period:");
+    expect(contents[1]).not.toContain("commits:");
     expect(input).toMatchObject({
       max_tokens: 1024,
       temperature: 0,
       response_format: {
         type: "json_schema",
         json_schema: {
-          properties: { summary: { minLength: 80, maxLength: 150 } },
+          properties: { summary: { minLength: 40, maxLength: 300 } },
         },
       },
     });
@@ -141,8 +144,8 @@ describe("Workers AI summaries", () => {
   });
 
   it.each([
-    ["shorter than 80 characters", "あ".repeat(79)],
-    ["longer than 150 characters", "あ".repeat(151)],
+    ["shorter than 40 characters", "あ".repeat(39)],
+    ["longer than 300 characters", "あ".repeat(301)],
   ])("rejects summaries %s", async (_case, summary) => {
     const changeRecordId = await seedSummaryRecord();
     const run = vi.fn(() =>
