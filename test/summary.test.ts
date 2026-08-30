@@ -114,7 +114,7 @@ describe("Workers AI summaries", () => {
     expect(contents[1]).toContain(
       "body: 選択した期間をURLへ反映し、前後期間への移動と再読み込み後の状態維持に対応した。",
     );
-    expect(contents[1]).toContain("repository: changes");
+    expect(contents[1]).not.toContain("repository:");
     expect(contents[1]).not.toContain("period:");
     expect(contents[1]).not.toContain("commits:");
     expect(input).toMatchObject({
@@ -141,6 +141,70 @@ describe("Workers AI summaries", () => {
       summary_status: "ready",
       summary_model: "@cf/meta/llama-3.1-8b-instruct-fast",
     });
+  });
+
+  it.each([
+    [
+      "a repository, period and commit count preamble",
+      `changesリポジトリの2026年8月22日から23日までの9件のコミットの要約です。${VALID_SUMMARY}`,
+    ],
+    ["a lead-in preamble", `以下は今回の変更のまとめ。${VALID_SUMMARY}`],
+    [
+      "metadata fields",
+      `リポジトリ: changes。期間: 2026-08-22 - 2026-08-23。${VALID_SUMMARY}`,
+    ],
+  ])("drops %s from a stored summary", async (_case, summary) => {
+    const changeRecordId = await seedSummaryRecord();
+    const run = vi.fn(() => Promise.resolve({ response: { summary } }));
+
+    await generateSummary({ DB: env.DB, AI: { run } }, changeRecordId);
+
+    const row = await env.DB.prepare(
+      "SELECT summary_text FROM change_records WHERE id = ?",
+    )
+      .bind(changeRecordId)
+      .first<{ summary_text: string }>();
+    expect(row?.summary_text).toBe(VALID_SUMMARY);
+  });
+
+  it("keeps a summary that only mentions a change to a summary section", async () => {
+    const changeRecordId = await seedSummaryRecord();
+    const summary =
+      "READMEに設定手順の概要。あわせて期間ナビゲーションの説明を追記し、URL反映の挙動を明記した。";
+    const run = vi.fn(() => Promise.resolve({ response: { summary } }));
+
+    await generateSummary({ DB: env.DB, AI: { run } }, changeRecordId);
+
+    const row = await env.DB.prepare(
+      "SELECT summary_text FROM change_records WHERE id = ?",
+    )
+      .bind(changeRecordId)
+      .first<{ summary_text: string }>();
+    expect(row?.summary_text).toBe(summary);
+  });
+
+  it("fails a summary that is nothing but a preamble", async () => {
+    const changeRecordId = await seedSummaryRecord();
+    const run = vi.fn(() =>
+      Promise.resolve({
+        response: {
+          summary:
+            "changesリポジトリの2026年8月22日から23日までの9件のコミットの要約です。以下はそのまとめ。",
+        },
+      }),
+    );
+
+    await expect(
+      generateSummary({ DB: env.DB, AI: { run } }, changeRecordId),
+    ).rejects.toThrow("described only its own metadata");
+
+    const row = await env.DB.prepare(
+      "SELECT summary_status, summary_text FROM change_records WHERE id = ?",
+    )
+      .bind(changeRecordId)
+      .first<{ summary_status: string; summary_text: string | null }>();
+    expect(row?.summary_status).toBe("failed");
+    expect(row?.summary_text).toBeNull();
   });
 
   it.each([
