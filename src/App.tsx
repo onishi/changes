@@ -11,6 +11,7 @@ import { dataCutoffPeriodKey } from "../shared/data-cutoff";
 import type {
   BootstrapData,
   ChangeRecord,
+  CommitsResponse,
   LatestDailyResponse,
   PeriodResponse,
   PeriodType,
@@ -80,13 +81,21 @@ function apiPath(route: RouteState): string {
 }
 
 function latestDailyApiPath(route: RouteState): string {
-  return route.repository
-    ? `/api/public/repositories/${encodeURIComponent(route.repository)}/latest-daily`
-    : "/api/public/latest-daily";
+  const repository = route.repository
+    ? `/repositories/${encodeURIComponent(route.repository)}`
+    : "";
+  return `/api/${route.scope}${repository}/latest-daily`;
 }
 
-function repositoryOverviewPath(repository: string): string {
-  return `/repo/${encodeURIComponent(repository)}/`;
+function overviewPath(scope: RouteState["scope"], repository?: string | null) {
+  const prefix = scope === "all" ? "/all" : "";
+  return repository
+    ? `${prefix}/repo/${encodeURIComponent(repository)}/`
+    : `${prefix}/`;
+}
+
+function recordCommitsApiPath(scope: RouteState["scope"], recordId: string) {
+  return `/api/${scope}/records/${encodeURIComponent(recordId)}/commits`;
 }
 
 function formatPeriod(data: PeriodResponse): string {
@@ -200,7 +209,9 @@ function LatestDaily({
                 return (
                   <article className="daily-feed-item" key={record.id}>
                     <h3>
-                      <a href={repositoryOverviewPath(record.repository.name)}>
+                      <a
+                        href={overviewPath(route.scope, record.repository.name)}
+                      >
                         {record.repository.name}
                       </a>
                     </h3>
@@ -248,6 +259,30 @@ function ChangeCard({
   record: ChangeRecord;
   route: RouteState;
 }) {
+  const [commits, setCommits] = useState(record.commits);
+  const [commitsLoading, setCommitsLoading] = useState(false);
+  const [commitsLoaded, setCommitsLoaded] = useState(record.commits.length > 0);
+  const [commitsError, setCommitsError] = useState<string | null>(null);
+
+  const loadCommits = () => {
+    if (commitsLoaded || commitsLoading || record.commitCount === 0) return;
+    setCommitsLoading(true);
+    setCommitsError(null);
+    void fetchJson<CommitsResponse>(
+      recordCommitsApiPath(route.scope, record.id),
+    )
+      .then((response) => {
+        setCommits(response.commits);
+        setCommitsLoaded(true);
+      })
+      .catch((error: unknown) => {
+        setCommitsError(
+          error instanceof Error ? error.message : "Could not load commits.",
+        );
+      })
+      .finally(() => setCommitsLoading(false));
+  };
+
   return (
     <article className="change-card">
       <header className="card-header">
@@ -261,16 +296,7 @@ function ChangeCard({
             <span>{record.commitCount} commits</span>
           </div>
           <h2>
-            <a
-              href={
-                record.repository.visibility === "public"
-                  ? repositoryOverviewPath(record.repository.name)
-                  : buildPath(route, {
-                      repository: record.repository.name,
-                      cursor: null,
-                    })
-              }
-            >
+            <a href={overviewPath(route.scope, record.repository.name)}>
               {record.repository.name}
             </a>
           </h2>
@@ -287,7 +313,12 @@ function ChangeCard({
 
       <Summary record={record} />
 
-      <details className="commit-details">
+      <details
+        className="commit-details"
+        onToggle={(event) => {
+          if (event.currentTarget.open) loadCommits();
+        }}
+      >
         <summary>
           <span>Commit list</span>
           <span className="commit-range">
@@ -296,7 +327,9 @@ function ChangeCard({
           </span>
         </summary>
         <ol className="commit-list">
-          {record.commits.map((commit) => (
+          {commitsLoading && <li className="commit-state">Loading commits…</li>}
+          {commitsError && <li className="commit-state">{commitsError}</li>}
+          {commits.map((commit) => (
             <li key={commit.oid}>
               <a
                 href={commit.html_url}
@@ -334,11 +367,11 @@ function Header({
       cursor: null,
     });
   };
-  const allPath = buildPath(route, { scope: "all", cursor: null });
+  const allPath = route.isOverview
+    ? overviewPath("all", route.repository)
+    : buildPath(route, { scope: "all", cursor: null });
   const publicPath = route.isOverview
-    ? route.repository
-      ? repositoryOverviewPath(route.repository)
-      : "/"
+    ? overviewPath("public", route.repository)
     : buildPath(route, { scope: "public", cursor: null });
 
   return (
@@ -623,7 +656,7 @@ export function App() {
                     <>
                       {" · "}
                       {route.scope === "public" ? (
-                        <a href={repositoryOverviewPath(route.repository)}>
+                        <a href={overviewPath("public", route.repository)}>
                           {route.repository}
                         </a>
                       ) : (

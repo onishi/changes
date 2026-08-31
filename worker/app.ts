@@ -9,6 +9,7 @@ import {
 import {
   getLatestDailyRecords,
   getPeriodRecords,
+  getRecordCommits,
   listRepositories,
 } from "./api";
 import type { QueueMessage, Scope, SessionRow } from "./domain";
@@ -106,6 +107,7 @@ async function periodResponse(
       periodKey: date,
       repositoryName,
       cursor: context.req.query("cursor"),
+      includeCommits: false,
     });
     context.header(
       "Cache-Control",
@@ -123,14 +125,20 @@ async function periodResponse(
 
 async function latestDailyResponse(
   context: Context<AppBindings>,
+  scope: Scope,
   repositoryName?: string,
 ) {
   try {
-    context.header("Cache-Control", "public, max-age=60, s-maxage=300");
+    context.header(
+      "Cache-Control",
+      scope === "public"
+        ? "public, max-age=60, s-maxage=300"
+        : "private, no-store",
+    );
     return context.json(
       await getLatestDailyRecords({
         env: context.env,
-        scope: "public",
+        scope,
         repositoryName,
         days: 5,
       }),
@@ -148,9 +156,17 @@ app.get("/api/public/repositories", async (context) => {
     repositories: await listRepositories(context.env.DB, "public"),
   });
 });
-app.get("/api/public/latest-daily", (context) => latestDailyResponse(context));
+app.get("/api/public/latest-daily", (context) =>
+  latestDailyResponse(context, "public"),
+);
 app.get("/api/public/repositories/:repo/latest-daily", (context) =>
-  latestDailyResponse(context, context.req.param("repo")),
+  latestDailyResponse(context, "public", context.req.param("repo")),
+);
+app.get("/api/all/latest-daily", (context) =>
+  latestDailyResponse(context, "all"),
+);
+app.get("/api/all/repositories/:repo/latest-daily", (context) =>
+  latestDailyResponse(context, "all", context.req.param("repo")),
 );
 app.get("/api/all/repositories", async (context) =>
   context.json({ repositories: await listRepositories(context.env.DB, "all") }),
@@ -166,6 +182,34 @@ app.get("/api/public/repositories/:repo/periods/:period/:date", (context) =>
 );
 app.get("/api/all/repositories/:repo/periods/:period/:date", (context) =>
   periodResponse(context, "all", context.req.param("repo")),
+);
+
+async function recordCommitsResponse(
+  context: Context<AppBindings>,
+  scope: Scope,
+) {
+  const recordId = context.req.param("recordId");
+  if (!recordId) return context.json({ error: "Invalid change record." }, 400);
+  const result = await getRecordCommits({
+    env: context.env,
+    scope,
+    recordId,
+  });
+  if (!result) return context.json({ error: "Change record not found." }, 404);
+  context.header(
+    "Cache-Control",
+    scope === "public"
+      ? "public, max-age=60, s-maxage=300"
+      : "private, no-store",
+  );
+  return context.json(result);
+}
+
+app.get("/api/public/records/:recordId/commits", (context) =>
+  recordCommitsResponse(context, "public"),
+);
+app.get("/api/all/records/:recordId/commits", (context) =>
+  recordCommitsResponse(context, "all"),
 );
 
 app.post("/api/all/sync", async (context) => {

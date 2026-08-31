@@ -88,6 +88,10 @@ export interface PeriodResponse {
   nextCursor: string | null;
 }
 
+export interface CommitsResponse {
+  commits: Commit[];
+}
+
 export interface LatestDailyResponse {
   records: ChangeRecord[];
 }

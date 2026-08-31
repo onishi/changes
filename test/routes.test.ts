@@ -30,21 +30,24 @@ describe("frontend routes", () => {
     expect(canonicalPaths).toEqual([]);
   });
 
-  it("treats dated and authenticated routes as period pages", () => {
+  it("treats dated routes as period pages", () => {
     expect(isOverviewPath("/daily/2026-08-24")).toBe(false);
-    expect(isOverviewPath("/all")).toBe(false);
     expect(isOverviewPath("/public/daily/2026-08-24")).toBe(false);
     expect(isOverviewPath("/repo/kinki-zoo/daily/2026-08-24")).toBe(false);
   });
 
-  it("canonicalizes the authenticated root to its current daily page", () => {
+  it("keeps authenticated roots on overview pages", () => {
     const canonicalPaths: string[] = [];
     const route = parseRoute({ pathname: "/all", search: "" }, (path) =>
       canonicalPaths.push(path),
     );
 
-    expect(route.isOverview).toBe(false);
-    expect(canonicalPaths).toEqual([`/all/daily/${route.key}`]);
+    expect(isOverviewPath("/all")).toBe(true);
+    expect(isOverviewPath("/all/")).toBe(true);
+    expect(isOverviewPath("/all/repo/kinki-zoo/")).toBe(true);
+    expect(route.scope).toBe("all");
+    expect(route.isOverview).toBe(true);
+    expect(canonicalPaths).toEqual([]);
   });
 
   it("clamps routes and period switches to the data cutoff", () => {

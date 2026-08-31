@@ -45,7 +45,7 @@ async function loadBootstrapData(
     if (route.isOverview) {
       bootstrap.latestDailyData = await getLatestDailyRecords({
         env,
-        scope: "public",
+        scope: route.scope,
         repositoryName: route.repository ?? undefined,
         days: 5,
       });
@@ -59,6 +59,7 @@ async function loadBootstrapData(
       periodKey: route.key,
       repositoryName: route.repository ?? undefined,
       cursor: route.cursor,
+      includeCommits: false,
     });
   } catch (error) {
     bootstrap.error =

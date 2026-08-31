@@ -19,6 +19,7 @@ import {
 import { createCommitLogUrl } from "./records";
 import type {
   ChangeRecord,
+  CommitsResponse,
   LatestDailyResponse,
   PeriodResponse,
 } from "../src/types";
@@ -28,6 +29,37 @@ const cursorSchema = z.object({
   lastCommittedAt: z.iso.datetime(),
   repositoryId: z.string().min(1),
 });
+
+export async function getRecordCommits(options: {
+  env: Env;
+  scope: Scope;
+  recordId: string;
+}): Promise<CommitsResponse | null> {
+  const record = await options.env.DB.prepare(
+    `SELECT cr.id
+       FROM change_records cr
+       JOIN repositories r ON r.id = cr.repository_id
+      WHERE cr.id = ? AND cr.scope = ? AND r.deleted_at IS NULL
+        ${options.scope === "public" ? "AND r.visibility = 'public'" : ""}`,
+  )
+    .bind(options.recordId, options.scope)
+    .first<{ id: string }>();
+  if (!record) return null;
+
+  const result = await options.env.DB.prepare(
+    `SELECT c.repository_id, c.oid, c.message_headline, c.message_body,
+            c.committed_at, c.author_github_user_id, c.author_login,
+            c.html_url, c.is_merge
+       FROM change_record_commits crc
+       JOIN commits c
+         ON c.repository_id = crc.repository_id AND c.oid = crc.commit_oid
+      WHERE crc.change_record_id = ? AND c.committed_at >= ?
+      ORDER BY c.committed_at DESC, c.oid ASC`,
+  )
+    .bind(options.recordId, DATA_CUTOFF_INSTANT)
+    .all<CommitRow>();
+  return { commits: result.results };
+}
 
 type RecordWithRepository = ChangeRecordRow;
 

@@ -1,8 +1,9 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import type { BootstrapData } from "../src/types";
+import type { BootstrapData, PeriodResponse } from "../src/types";
 import { app } from "../worker/app";
 import { serializeBootstrap } from "../worker/bootstrap";
+import { hmacSha256 } from "../worker/lib/crypto";
 
 const shell = `<!doctype html><html><head><title>changes</title></head><body><div id="root"></div><script type="module" src="/assets/index.js"></script></body></html>`;
 
@@ -70,6 +71,19 @@ async function insertPublicRepository(): Promise<void> {
     .run();
 }
 
+async function authenticatedHeaders(): Promise<HeadersInit> {
+  const token = "test-session-token";
+  const now = "2026-08-20T12:00:00.000Z";
+  await env.DB.prepare(
+    `INSERT INTO sessions (
+       token_hash, github_user_id, github_login, created_at, last_seen_at, expires_at
+     ) VALUES (?, '14186', 'onishi', ?, ?, '2999-01-01T00:00:00.000Z')`,
+  )
+    .bind(await hmacSha256(testEnv().SESSION_SECRET, token), now, now)
+    .run();
+  return { Cookie: `changes_session=${token}` };
+}
+
 describe("HTTP access boundaries", () => {
   it("serves health and public period APIs without authentication", async () => {
     const health = await app.request("/api/health", {}, testEnv());
@@ -83,6 +97,17 @@ describe("HTTP access boundaries", () => {
     );
     expect(period.status).toBe(200);
     expect(period.headers.get("Cache-Control")).toContain("public");
+    const periodBody: PeriodResponse = await period.json();
+    expect(
+      periodBody.records.every((record) => record.commits.length === 0),
+    ).toBe(true);
+
+    const missingCommits = await app.request(
+      "/api/public/records/missing/commits",
+      {},
+      testEnv(),
+    );
+    expect(missingCommits.status).toBe(404);
 
     const latestDaily = await app.request(
       "/api/public/latest-daily",
@@ -125,6 +150,25 @@ describe("HTTP access boundaries", () => {
     );
     expect(pageResponse.status).toBe(302);
     expect(pageResponse.headers.get("Location")).toContain("/api/auth/login");
+  });
+
+  it("serves the authenticated all overview and latest-daily API", async () => {
+    const headers = await authenticatedHeaders();
+    const response = await app.request("/all/", { headers }, testEnv());
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    const bootstrap = extractBootstrap(await response.text());
+    expect(bootstrap.path).toBe("/all/");
+    expect(bootstrap.latestDailyData).toEqual({ records: [] });
+    expect(bootstrap.periodData).toBeNull();
+
+    const apiResponse = await app.request(
+      "/api/all/latest-daily",
+      { headers },
+      testEnv(),
+    );
+    expect(apiResponse.status).toBe(200);
+    expect(apiResponse.headers.get("Cache-Control")).toBe("private, no-store");
   });
 
   it("rejects a cross-origin sync request before queueing work", async () => {

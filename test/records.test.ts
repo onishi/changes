@@ -1,6 +1,10 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { getLatestDailyRecords, getPeriodRecords } from "../worker/api";
+import {
+  getLatestDailyRecords,
+  getPeriodRecords,
+  getRecordCommits,
+} from "../worker/api";
 import type { RepositoryRow } from "../worker/domain";
 import { rebuildAffectedRecords } from "../worker/records";
 
@@ -249,6 +253,23 @@ describe("change record aggregation and public boundary", () => {
       includeCommits: false,
     });
     expect(preview.records[0]?.commits).toEqual([]);
+
+    const commits = await getRecordCommits({
+      env: testEnv(),
+      scope: "public",
+      recordId: preview.records[0]?.id ?? "",
+    });
+    expect(commits?.commits.map((commit) => commit.oid)).toEqual([
+      "bbb222",
+      "aaa111",
+    ]);
+    await expect(
+      getRecordCommits({
+        env: testEnv(),
+        scope: "all",
+        recordId: preview.records[0]?.id ?? "",
+      }),
+    ).resolves.toBeNull();
   });
 
   it("keeps only cutoff-and-later commits in the boundary week", async () => {
@@ -407,6 +428,17 @@ describe("change record aggregation and public boundary", () => {
     });
     expect(JSON.stringify(allResult)).toContain("secret-project");
     expect(allResult.stats).toEqual({ repository_count: 2, commit_count: 2 });
+
+    const allLatest = await getLatestDailyRecords({
+      env: testEnv(),
+      scope: "all",
+      days: 5,
+      now: new Date("2026-08-20T12:00:00.000Z"),
+    });
+    expect(allLatest.records.map((record) => record.repository.name)).toEqual([
+      "secret-project",
+      "changes",
+    ]);
   });
 
   it("returns 404-equivalent behavior for a private repository in public scope", async () => {
