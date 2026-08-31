@@ -26,6 +26,7 @@ async function seedSummaryRecord(): Promise<string> {
     github_updated_at: TEST_NOW,
     last_synced_at: null,
     deleted_at: null,
+    created_at: TEST_NOW,
   };
   await env.DB.prepare(
     `INSERT INTO repositories (

@@ -110,11 +110,15 @@ export async function listRepositories(
   const result = await db
     .prepare(
       `SELECT id, owner_login, name, full_name, visibility, html_url, default_branch,
-              is_archived, is_fork, github_updated_at, last_synced_at, deleted_at
+              is_archived, is_fork, github_updated_at, last_synced_at, deleted_at,
+              created_at
        FROM repositories
-       WHERE deleted_at IS NULL ${visibility}
-       ORDER BY name COLLATE NOCASE ASC`,
+       WHERE deleted_at IS NULL
+         AND github_updated_at >= ?
+         ${visibility}
+       ORDER BY github_updated_at DESC`,
     )
+    .bind(DATA_CUTOFF_INSTANT)
     .all<RepositoryRow>();
   return result.results;
 }

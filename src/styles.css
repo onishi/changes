@@ -504,10 +504,10 @@ main {
 }
 
 .repo-index-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) auto 90px;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 24px;
   padding: 20px 12px;
   border-bottom: 1px solid var(--line);
   color: inherit;
@@ -527,6 +527,19 @@ main {
   font-family: "Newsreader", Georgia, serif;
   font-size: clamp(1.15rem, 2vw, 1.5rem);
   font-weight: 500;
+}
+
+.repo-index-meta {
+  display: flex;
+  gap: 20px;
+  color: var(--muted);
+  font-family: "DM Mono", monospace;
+  font-size: 0.65rem;
+  white-space: nowrap;
+}
+
+.repo-index-meta time {
+  color: var(--ink);
 }
 
 .repo-index-empty {
@@ -919,6 +932,15 @@ footer {
   .daily-feed-item {
     grid-template-columns: minmax(150px, 0.5fr) minmax(240px, 1fr) 90px 24px;
     gap: 20px;
+  }
+
+  .repo-index-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 20px;
+  }
+
+  .repo-index-meta {
+    grid-column: 1 / -1;
   }
 
   .stats {

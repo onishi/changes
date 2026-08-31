@@ -16,6 +16,7 @@ function repository(lastSyncedAt: string | null): RepositoryRow {
     github_updated_at: null,
     last_synced_at: lastSyncedAt,
     deleted_at: null,
+    created_at: "2026-05-01T00:00:00.000Z",
   };
 }
 

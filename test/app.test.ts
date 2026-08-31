@@ -71,6 +71,31 @@ async function insertPublicRepository(): Promise<void> {
     .run();
 }
 
+async function insertRepository(options: {
+  id: string;
+  name: string;
+  githubUpdatedAt: string;
+}): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO repositories (
+       id, owner_login, name, full_name, visibility, html_url, default_branch,
+       is_archived, is_fork, github_updated_at, last_synced_at, deleted_at,
+       created_at, updated_at
+     ) VALUES (?, ?, ?, ?, 'public', ?, 'main', 0, 0, ?, NULL, NULL, ?, ?)`,
+  )
+    .bind(
+      options.id,
+      "onishi",
+      options.name,
+      `onishi/${options.name}`,
+      `https://github.com/onishi/${options.name}`,
+      options.githubUpdatedAt,
+      options.githubUpdatedAt,
+      options.githubUpdatedAt,
+    )
+    .run();
+}
+
 async function authenticatedHeaders(): Promise<HeadersInit> {
   const token = "test-session-token";
   const now = "2026-08-20T12:00:00.000Z";
@@ -234,6 +259,31 @@ describe("HTTP access boundaries", () => {
     const body: { repositories: { name: string }[] } = await apiResponse.json();
     expect(body.repositories).toHaveLength(1);
     expect(body.repositories[0]?.name).toBe("kinki-zoo");
+  });
+
+  it("sorts repositories by recency and drops those before the data cutoff", async () => {
+    await insertPublicRepository();
+    await insertRepository({
+      id: "repo_recent",
+      name: "aurora",
+      githubUpdatedAt: "2026-08-25T00:00:00.000Z",
+    });
+    await insertRepository({
+      id: "repo_stale",
+      name: "old-project",
+      githubUpdatedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const apiResponse = await app.request(
+      "/api/public/repositories",
+      {},
+      testEnv(),
+    );
+    const body: { repositories: { name: string }[] } = await apiResponse.json();
+    expect(body.repositories.map((repository) => repository.name)).toEqual([
+      "aurora",
+      "kinki-zoo",
+    ]);
   });
 
   it("requires authentication for the private repository index", async () => {

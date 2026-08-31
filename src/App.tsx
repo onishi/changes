@@ -57,6 +57,12 @@ const timeFormatter = new Intl.DateTimeFormat("en-US", {
   hour12: false,
 });
 
+const shortDateFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Asia/Tokyo",
+  month: "short",
+  day: "numeric",
+});
+
 async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, {
     headers: { Accept: "application/json" },
@@ -285,6 +291,24 @@ function RepositoryIndex({
               href={overviewPath(route.scope, repository.name)}
             >
               <span className="repo-index-name">{repository.name}</span>
+              <span className="repo-index-meta">
+                <span>
+                  Created{" "}
+                  <time dateTime={repository.created_at}>
+                    {shortDateFormatter.format(new Date(repository.created_at))}
+                  </time>
+                </span>
+                {repository.github_updated_at && (
+                  <span>
+                    Updated{" "}
+                    <time dateTime={repository.github_updated_at}>
+                      {shortDateFormatter.format(
+                        new Date(repository.github_updated_at),
+                      )}
+                    </time>
+                  </span>
+                )}
+              </span>
               <span
                 className={`visibility visibility-${repository.visibility}`}
               >
@@ -470,6 +494,12 @@ function Header({
         aria-label="View options"
       >
         <nav className="period-nav" aria-label="Period">
+          <a
+            href={overviewPath(route.scope, null, true)}
+            aria-current={route.isRepositoryIndex ? "page" : undefined}
+          >
+            Repos
+          </a>
           {(Object.keys(periodLabels) as PeriodType[]).map((period) => (
             <a
               key={period}

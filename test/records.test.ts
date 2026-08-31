@@ -21,6 +21,7 @@ const publicRepository: RepositoryRow = {
   github_updated_at: "2026-08-20T12:00:00.000Z",
   last_synced_at: null,
   deleted_at: null,
+  created_at: "2026-08-20T12:00:00.000Z",
 };
 
 const privateRepository: RepositoryRow = {

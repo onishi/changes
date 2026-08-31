@@ -24,6 +24,7 @@ export interface Repository {
   github_updated_at: string | null;
   last_synced_at: string | null;
   deleted_at: string | null;
+  created_at: string;
 }
 
 export interface Commit {
