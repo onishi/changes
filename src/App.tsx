@@ -151,11 +151,7 @@ function LatestDaily({
   return (
     <section className="daily-feed" aria-labelledby="daily-feed-title">
       <header className="daily-feed-header">
-        <div>
-          <p className="section-label">Overview</p>
-          <h1 id="daily-feed-title">Recent changes</h1>
-        </div>
-        <p>Repository updates from the last five days, grouped by day</p>
+        <h1 id="daily-feed-title">Recent changes</h1>
       </header>
 
       <div className="daily-feed-list">

@@ -339,10 +339,6 @@ main {
 }
 
 .daily-feed-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 360px);
-  align-items: end;
-  gap: 40px;
   padding: 16px 0 26px;
 }
 
@@ -353,13 +349,6 @@ main {
   font-weight: 400;
   letter-spacing: -0.06em;
   line-height: 0.92;
-}
-
-.daily-feed-header > p {
-  margin: 0 0 6px;
-  color: var(--muted);
-  font-size: 0.82rem;
-  line-height: 1.8;
 }
 
 .daily-feed-list {
@@ -882,11 +871,6 @@ footer {
   .hero h1 {
     font-size: 2.15rem;
     line-height: 1;
-  }
-
-  .daily-feed-header {
-    grid-template-columns: 1fr;
-    gap: 18px;
   }
 
   .daily-feed-header h1 {
