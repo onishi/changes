@@ -16,6 +16,7 @@ import type {
   LatestDailyResponse,
   PeriodResponse,
   PeriodType,
+  RepositoriesResponse,
   RouteState,
   SessionResponse,
 } from "./types";
@@ -88,11 +89,18 @@ function latestDailyApiPath(route: RouteState): string {
   return `/api/${route.scope}${repository}/latest-daily`;
 }
 
-function overviewPath(scope: RouteState["scope"], repository?: string | null) {
+function repositoriesApiPath(route: RouteState): string {
+  return `/api/${route.scope}/repositories`;
+}
+
+function overviewPath(
+  scope: RouteState["scope"],
+  repository?: string | null,
+  isRepositoryIndex?: boolean,
+) {
   const prefix = scope === "all" ? "/all" : "";
-  return repository
-    ? `${prefix}/repo/${encodeURIComponent(repository)}/`
-    : `${prefix}/`;
+  if (repository) return `${prefix}/repo/${encodeURIComponent(repository)}/`;
+  return isRepositoryIndex ? `${prefix}/repo/` : `${prefix}/`;
 }
 
 function recordCommitsApiPath(scope: RouteState["scope"], recordId: string) {
@@ -253,6 +261,43 @@ function LatestDaily({
   );
 }
 
+function RepositoryIndex({
+  data,
+  route,
+}: {
+  data: RepositoriesResponse;
+  route: RouteState;
+}) {
+  return (
+    <section className="repo-index" aria-labelledby="repo-index-title">
+      <header className="repo-index-header">
+        <h1 id="repo-index-title">Repositories</h1>
+      </header>
+
+      <div className="repo-index-list">
+        {data.repositories.length === 0 ? (
+          <p className="repo-index-empty">No repositories yet.</p>
+        ) : (
+          data.repositories.map((repository) => (
+            <a
+              className="repo-index-item"
+              key={repository.id}
+              href={overviewPath(route.scope, repository.name)}
+            >
+              <span className="repo-index-name">{repository.name}</span>
+              <span
+                className={`visibility visibility-${repository.visibility}`}
+              >
+                {repository.visibility}
+              </span>
+            </a>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
 function ChangeCard({
   record,
   route,
@@ -369,10 +414,10 @@ function Header({
     });
   };
   const allPath = route.isOverview
-    ? overviewPath("all", route.repository)
+    ? overviewPath("all", route.repository, route.isRepositoryIndex)
     : buildPath(route, { scope: "all", cursor: null });
   const publicPath = route.isOverview
-    ? overviewPath("public", route.repository)
+    ? overviewPath("public", route.repository, route.isRepositoryIndex)
     : buildPath(route, { scope: "public", cursor: null });
 
   return (
@@ -530,14 +575,18 @@ export function App() {
     const path = `${window.location.pathname}${window.location.search}`;
     return initial?.path === path ? initial : null;
   }, []);
-  const hasCompleteBootstrap = route.isOverview
-    ? Boolean(bootstrap?.latestDailyData || bootstrap?.error)
-    : Boolean(bootstrap?.periodData || bootstrap?.error);
+  const hasCompleteBootstrap = route.isRepositoryIndex
+    ? Boolean(bootstrap?.repositoriesData || bootstrap?.error)
+    : route.isOverview
+      ? Boolean(bootstrap?.latestDailyData || bootstrap?.error)
+      : Boolean(bootstrap?.periodData || bootstrap?.error);
   const [data, setData] = useState<PeriodResponse | null>(
     bootstrap?.periodData ?? null,
   );
   const [latestDailyData, setLatestDailyData] =
     useState<LatestDailyResponse | null>(bootstrap?.latestDailyData ?? null);
+  const [repositoriesData, setRepositoriesData] =
+    useState<RepositoriesResponse | null>(bootstrap?.repositoriesData ?? null);
   const [session, setSession] = useState<SessionResponse | null>(
     bootstrap?.session ?? null,
   );
@@ -548,6 +597,16 @@ export function App() {
     async (signal?: AbortSignal) => {
       setError(null);
       try {
+        if (route.isRepositoryIndex) {
+          setRepositoriesData(
+            await fetchJson<RepositoriesResponse>(
+              repositoriesApiPath(route),
+              signal,
+            ),
+          );
+          return;
+        }
+
         if (route.isOverview) {
           setLatestDailyData(
             await fetchJson<LatestDailyResponse>(
@@ -666,6 +725,12 @@ export function App() {
               Try again
             </button>
           </section>
+        ) : route.isRepositoryIndex ? (
+          repositoriesData ? (
+            <RepositoryIndex data={repositoriesData} route={route} />
+          ) : (
+            <Loading />
+          )
         ) : route.isOverview ? (
           latestDailyData ? (
             <LatestDaily data={latestDailyData} route={route} />

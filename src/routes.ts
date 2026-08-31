@@ -88,10 +88,13 @@ export function buildPath(
 export function isOverviewPath(pathname: string): boolean {
   const parts = pathname.split("/").filter(Boolean);
   if (parts[0] === "public" || parts[0] === "all") parts.shift();
-  return (
-    parts.length === 0 ||
-    (parts.length === 2 && parts[0] === "repo" && Boolean(parts[1]))
-  );
+  return parts.length === 0 || (parts[0] === "repo" && parts.length <= 2);
+}
+
+export function isRepositoryIndexPath(pathname: string): boolean {
+  const parts = pathname.split("/").filter(Boolean);
+  if (parts[0] === "public" || parts[0] === "all") parts.shift();
+  return parts.length === 1 && parts[0] === "repo";
 }
 
 function decodeRepository(value: string): string | null {
@@ -108,6 +111,7 @@ export function parseRoute(
 ): RouteState {
   const parts = location.pathname.split("/").filter(Boolean);
   const isOverview = isOverviewPath(location.pathname);
+  const isRepositoryIndex = isRepositoryIndexPath(location.pathname);
   let index = 0;
   const scope: Scope = parts[0] === "all" ? "all" : "public";
   if (scope === "all") index += 1;
@@ -137,6 +141,7 @@ export function parseRoute(
   const route = {
     scope,
     isOverview,
+    isRepositoryIndex,
     period,
     key: normalizedKey,
     repository,

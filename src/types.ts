@@ -4,6 +4,7 @@ export type Scope = "public" | "all";
 export interface RouteState {
   scope: Scope;
   isOverview: boolean;
+  isRepositoryIndex: boolean;
   period: PeriodType;
   key: string;
   repository: string | null;
@@ -96,6 +97,10 @@ export interface LatestDailyResponse {
   records: ChangeRecord[];
 }
 
+export interface RepositoriesResponse {
+  repositories: Repository[];
+}
+
 export interface SessionResponse {
   authenticated: boolean;
   user: { id: string; login: string } | null;
@@ -105,6 +110,7 @@ export interface BootstrapData {
   path: string;
   periodData: PeriodResponse | null;
   latestDailyData: LatestDailyResponse | null;
+  repositoriesData: RepositoriesResponse | null;
   session: SessionResponse | null;
   error: string | null;
 }

@@ -212,6 +212,43 @@ describe("HTTP access boundaries", () => {
     await expect(apiResponse.json()).resolves.toEqual({ records: [] });
   });
 
+  it("embeds a repository index listing and exposes its API", async () => {
+    await insertPublicRepository();
+
+    const response = await app.request("/repo/", {}, testEnv());
+    expect(response.status).toBe(200);
+    const bootstrap = extractBootstrap(await response.text());
+    expect(bootstrap.path).toBe("/repo/");
+    expect(bootstrap.repositoriesData?.repositories).toHaveLength(1);
+    expect(bootstrap.repositoriesData?.repositories[0]?.name).toBe("kinki-zoo");
+    expect(bootstrap.latestDailyData).toBeNull();
+    expect(bootstrap.periodData).toBeNull();
+    expect(bootstrap.error).toBeNull();
+
+    const apiResponse = await app.request(
+      "/api/public/repositories",
+      {},
+      testEnv(),
+    );
+    expect(apiResponse.status).toBe(200);
+    const body: { repositories: { name: string }[] } = await apiResponse.json();
+    expect(body.repositories).toHaveLength(1);
+    expect(body.repositories[0]?.name).toBe("kinki-zoo");
+  });
+
+  it("requires authentication for the private repository index", async () => {
+    const response = await app.request("/all/repo/", {}, testEnv());
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toContain("/api/auth/login");
+
+    const apiResponse = await app.request(
+      "/api/all/repositories",
+      {},
+      testEnv(),
+    );
+    expect(apiResponse.status).toBe(401);
+  });
+
   it("returns not found for an unknown repository overview API", async () => {
     const response = await app.request(
       "/api/public/repositories/missing/latest-daily",
@@ -284,6 +321,7 @@ describe("HTTP access boundaries", () => {
       path: "</script>",
       periodData: null,
       latestDailyData: null,
+      repositoriesData: null,
       session: null,
       error: "line\u2028separator",
     });

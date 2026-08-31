@@ -1,5 +1,9 @@
 import type { SessionRow } from "./domain";
-import { getLatestDailyRecords, getPeriodRecords } from "./api";
+import {
+  getLatestDailyRecords,
+  getPeriodRecords,
+  listRepositories,
+} from "./api";
 import { parseRoute } from "../src/routes";
 import type { BootstrapData, RouteState } from "../src/types";
 
@@ -20,6 +24,7 @@ function emptyBootstrap(request: Request): BootstrapData {
     path: requestPath(request),
     periodData: null,
     latestDailyData: null,
+    repositoriesData: null,
     session: null,
     error: null,
   };
@@ -42,6 +47,13 @@ async function loadBootstrapData(
       }
     : null;
   try {
+    if (route.isRepositoryIndex) {
+      bootstrap.repositoriesData = {
+        repositories: await listRepositories(env.DB, route.scope),
+      };
+      return bootstrap;
+    }
+
     if (route.isOverview) {
       bootstrap.latestDailyData = await getLatestDailyRecords({
         env,

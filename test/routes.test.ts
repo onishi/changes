@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildPath,
   isOverviewPath,
+  isRepositoryIndexPath,
   keyboardShortcutPath,
   parseRoute,
 } from "../src/routes";
@@ -33,6 +34,32 @@ describe("frontend routes", () => {
     expect(route.scope).toBe("public");
     expect(route.repository).toBe("kinki-zoo");
     expect(canonicalPaths).toEqual([]);
+  });
+
+  it("treats the repository index as an overview page", () => {
+    expect(isOverviewPath("/repo/")).toBe(true);
+    expect(isOverviewPath("/repo")).toBe(true);
+    expect(isOverviewPath("/all/repo/")).toBe(true);
+    expect(isRepositoryIndexPath("/repo/")).toBe(true);
+    expect(isRepositoryIndexPath("/repo")).toBe(true);
+    expect(isRepositoryIndexPath("/all/repo/")).toBe(true);
+    expect(isRepositoryIndexPath("/repo/kinki-zoo/")).toBe(false);
+    expect(isRepositoryIndexPath("/")).toBe(false);
+
+    const canonicalPaths: string[] = [];
+    const route = parseRoute({ pathname: "/repo/", search: "" }, (path) =>
+      canonicalPaths.push(path),
+    );
+    expect(route.isOverview).toBe(true);
+    expect(route.isRepositoryIndex).toBe(true);
+    expect(route.repository).toBeNull();
+    expect(canonicalPaths).toEqual([]);
+
+    const repoRoute = parseRoute({
+      pathname: "/repo/kinki-zoo/",
+      search: "",
+    });
+    expect(repoRoute.isRepositoryIndex).toBe(false);
   });
 
   it("treats dated routes as period pages", () => {
