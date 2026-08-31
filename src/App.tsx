@@ -190,27 +190,36 @@ function LatestDaily({
                   </time>
                 </a>
               </h2>
-              {records.map((record) => (
-                <a
-                  className="daily-feed-item"
-                  href={buildPath(route, {
-                    period: "daily",
-                    key: record.periodKey,
-                    repository: record.repository.name,
-                    cursor: null,
-                  })}
-                  key={record.id}
-                >
-                  <h3>{record.repository.name}</h3>
-                  <p>{summaryPreview(record)}</p>
-                  <div className="daily-feed-meta">
-                    <span>{record.commitCount} commits</span>
-                  </div>
-                  <span className="daily-feed-arrow" aria-hidden="true">
-                    →
-                  </span>
-                </a>
-              ))}
+              {records.map((record) => {
+                const dailyPath = buildPath(route, {
+                  period: "daily",
+                  key: record.periodKey,
+                  repository: record.repository.name,
+                  cursor: null,
+                });
+                return (
+                  <article className="daily-feed-item" key={record.id}>
+                    <h3>
+                      <a href={repositoryOverviewPath(record.repository.name)}>
+                        {record.repository.name}
+                      </a>
+                    </h3>
+                    <p>
+                      <a href={dailyPath}>{summaryPreview(record)}</a>
+                    </p>
+                    <div className="daily-feed-meta">
+                      <span>{record.commitCount} commits</span>
+                    </div>
+                    <a
+                      className="daily-feed-arrow"
+                      href={dailyPath}
+                      aria-label={`View ${record.repository.name} changes for ${record.periodKey}`}
+                    >
+                      <span aria-hidden="true">→</span>
+                    </a>
+                  </article>
+                );
+              })}
             </section>
           ))
         )}
@@ -254,7 +263,7 @@ function ChangeCard({
           <h2>
             <a
               href={
-                route.scope === "public"
+                record.repository.visibility === "public"
                   ? repositoryOverviewPath(record.repository.name)
                   : buildPath(route, {
                       repository: record.repository.name,
@@ -610,7 +619,18 @@ export function App() {
                   {route.scope === "all"
                     ? "Public + private"
                     : "Public changelog"}
-                  {route.repository ? ` · ${route.repository}` : ""}
+                  {route.repository && (
+                    <>
+                      {" · "}
+                      {route.scope === "public" ? (
+                        <a href={repositoryOverviewPath(route.repository)}>
+                          {route.repository}
+                        </a>
+                      ) : (
+                        route.repository
+                      )}
+                    </>
+                  )}
                 </p>
                 <h1>{formatPeriod(data)}</h1>
               </div>
