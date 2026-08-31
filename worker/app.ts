@@ -121,22 +121,37 @@ async function periodResponse(
   }
 }
 
+async function latestDailyResponse(
+  context: Context<AppBindings>,
+  repositoryName?: string,
+) {
+  try {
+    context.header("Cache-Control", "public, max-age=60, s-maxage=300");
+    return context.json(
+      await getLatestDailyRecords({
+        env: context.env,
+        scope: "public",
+        repositoryName,
+        days: 5,
+      }),
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Invalid request";
+    const status = message === "Repository not found." ? 404 : 400;
+    return context.json({ error: message }, status);
+  }
+}
+
 app.get("/api/public/repositories", async (context) => {
   context.header("Cache-Control", "public, max-age=60, s-maxage=300");
   return context.json({
     repositories: await listRepositories(context.env.DB, "public"),
   });
 });
-app.get("/api/public/latest-daily", async (context) => {
-  context.header("Cache-Control", "public, max-age=60, s-maxage=300");
-  return context.json(
-    await getLatestDailyRecords({
-      env: context.env,
-      scope: "public",
-      days: 5,
-    }),
-  );
-});
+app.get("/api/public/latest-daily", (context) => latestDailyResponse(context));
+app.get("/api/public/repositories/:repo/latest-daily", (context) =>
+  latestDailyResponse(context, context.req.param("repo")),
+);
 app.get("/api/all/repositories", async (context) =>
   context.json({ repositories: await listRepositories(context.env.DB, "all") }),
 );

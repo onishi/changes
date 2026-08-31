@@ -87,7 +87,11 @@ export function buildPath(
 
 export function isOverviewPath(pathname: string): boolean {
   const parts = pathname.split("/").filter(Boolean);
-  return parts.length === 0 || (parts.length === 1 && parts[0] === "public");
+  if (parts[0] === "public") parts.shift();
+  return (
+    parts.length === 0 ||
+    (parts.length === 2 && parts[0] === "repo" && Boolean(parts[1]))
+  );
 }
 
 function decodeRepository(value: string): string | null {

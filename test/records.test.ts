@@ -154,6 +154,29 @@ describe("change record aggregation and public boundary", () => {
     expect(result.records.every((record) => record.commits.length === 0)).toBe(
       true,
     );
+
+    const repositoryResult = await getLatestDailyRecords({
+      env: testEnv(),
+      scope: "public",
+      repositoryName: publicRepository.name,
+      days: 5,
+      now: new Date("2026-08-20T12:00:00.000Z"),
+    });
+    expect(repositoryResult.records).toHaveLength(5);
+    expect(
+      repositoryResult.records.every(
+        (record) => record.repository.name === publicRepository.name,
+      ),
+    ).toBe(true);
+
+    await expect(
+      getLatestDailyRecords({
+        env: testEnv(),
+        scope: "public",
+        repositoryName: "missing-repository",
+        now: new Date("2026-08-20T12:00:00.000Z"),
+      }),
+    ).rejects.toThrow("Repository not found");
   });
 
   it("rejects future periods and malformed cursors", async () => {

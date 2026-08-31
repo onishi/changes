@@ -48,6 +48,28 @@ function extractBootstrap(html: string): BootstrapData {
   return JSON.parse(html.slice(start + prefix.length, end)) as BootstrapData;
 }
 
+async function insertPublicRepository(): Promise<void> {
+  const now = "2026-08-20T12:00:00.000Z";
+  await env.DB.prepare(
+    `INSERT INTO repositories (
+       id, owner_login, name, full_name, visibility, html_url, default_branch,
+       is_archived, is_fork, github_updated_at, last_synced_at, deleted_at,
+       created_at, updated_at
+     ) VALUES (?, ?, ?, ?, 'public', ?, 'main', 0, 0, ?, NULL, NULL, ?, ?)`,
+  )
+    .bind(
+      "repo_public",
+      "onishi",
+      "kinki-zoo",
+      "onishi/kinki-zoo",
+      "https://github.com/onishi/kinki-zoo",
+      now,
+      now,
+      now,
+    )
+    .run();
+}
+
 describe("HTTP access boundaries", () => {
   it("serves health and public period APIs without authentication", async () => {
     const health = await app.request("/api/health", {}, testEnv());
@@ -124,6 +146,38 @@ describe("HTTP access boundaries", () => {
     expect(bootstrap.latestDailyData).not.toBeNull();
     expect(bootstrap.periodData).toBeNull();
     expect(bootstrap.error).toBeNull();
+  });
+
+  it("embeds repository overview data and exposes its latest-daily API", async () => {
+    await insertPublicRepository();
+
+    const response = await app.request("/repo/kinki-zoo/", {}, testEnv());
+    expect(response.status).toBe(200);
+    const bootstrap = extractBootstrap(await response.text());
+    expect(bootstrap.path).toBe("/repo/kinki-zoo/");
+    expect(bootstrap.latestDailyData).toEqual({ records: [] });
+    expect(bootstrap.periodData).toBeNull();
+    expect(bootstrap.error).toBeNull();
+
+    const apiResponse = await app.request(
+      "/api/public/repositories/kinki-zoo/latest-daily",
+      {},
+      testEnv(),
+    );
+    expect(apiResponse.status).toBe(200);
+    await expect(apiResponse.json()).resolves.toEqual({ records: [] });
+  });
+
+  it("returns not found for an unknown repository overview API", async () => {
+    const response = await app.request(
+      "/api/public/repositories/missing/latest-daily",
+      {},
+      testEnv(),
+    );
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: "Repository not found.",
+    });
   });
 
   it("embeds period data and canonicalizes old page routes", async () => {

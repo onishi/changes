@@ -124,6 +124,7 @@ function changeRecordFromRow(
 export async function getLatestDailyRecords(options: {
   env: Env;
   scope: Scope;
+  repositoryName?: string;
   days?: number;
   now?: Date;
 }): Promise<LatestDailyResponse> {
@@ -135,21 +136,49 @@ export async function getLatestDailyRecords(options: {
   const recentStart = new Date(
     new Date(today.start).getTime() - (days - 1) * 24 * 60 * 60 * 1000,
   ).toISOString();
-  const visibility =
-    options.scope === "public" ? "AND r.visibility = 'public'" : "";
+  const repository = options.repositoryName
+    ? await findRepository(
+        options.env.DB,
+        options.scope,
+        options.env.GITHUB_OWNER,
+        options.repositoryName,
+      )
+    : null;
+  if (options.repositoryName && !repository) {
+    throw new Error("Repository not found.");
+  }
+  const conditions = [
+    "cr.scope = ?",
+    "cr.period_type = 'daily'",
+    "cr.period_start >= ?",
+    "cr.period_start < ?",
+    "cr.period_start >= ?",
+    "r.deleted_at IS NULL",
+  ];
+  const bindings = [
+    options.scope,
+    recentStart,
+    today.endExclusive,
+    DATA_CUTOFF_INSTANT,
+  ];
+  if (options.scope === "public") {
+    conditions.push("r.visibility = 'public'");
+  }
+  if (repository) {
+    conditions.push("cr.repository_id = ?");
+    bindings.push(repository.id);
+  }
   const result = await options.env.DB.prepare(
     `SELECT cr.*, r.name AS repository_name, r.full_name AS repository_full_name,
             r.html_url AS repository_url, r.visibility AS repository_visibility,
             r.default_branch
      FROM change_records cr
      JOIN repositories r ON r.id = cr.repository_id
-     WHERE cr.scope = ? AND cr.period_type = 'daily'
-       AND cr.period_start >= ? AND cr.period_start < ?
-       AND cr.period_start >= ? AND r.deleted_at IS NULL ${visibility}
+     WHERE ${conditions.join(" AND ")}
      ORDER BY cr.period_start DESC, cr.last_committed_at DESC,
               r.name COLLATE NOCASE ASC`,
   )
-    .bind(options.scope, recentStart, today.endExclusive, DATA_CUTOFF_INSTANT)
+    .bind(...bindings)
     .all<RecordWithRepository>();
 
   return {

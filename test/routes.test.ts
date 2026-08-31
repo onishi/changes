@@ -15,10 +15,26 @@ describe("frontend routes", () => {
     expect(canonicalPaths).toEqual([]);
   });
 
+  it("treats public repository roots as overview pages", () => {
+    expect(isOverviewPath("/repo/kinki-zoo/")).toBe(true);
+    expect(isOverviewPath("/public/repo/kinki-zoo")).toBe(true);
+
+    const canonicalPaths: string[] = [];
+    const route = parseRoute(
+      { pathname: "/repo/kinki-zoo/", search: "" },
+      (path) => canonicalPaths.push(path),
+    );
+    expect(route.isOverview).toBe(true);
+    expect(route.scope).toBe("public");
+    expect(route.repository).toBe("kinki-zoo");
+    expect(canonicalPaths).toEqual([]);
+  });
+
   it("treats dated and authenticated routes as period pages", () => {
     expect(isOverviewPath("/daily/2026-08-24")).toBe(false);
     expect(isOverviewPath("/all")).toBe(false);
     expect(isOverviewPath("/public/daily/2026-08-24")).toBe(false);
+    expect(isOverviewPath("/repo/kinki-zoo/daily/2026-08-24")).toBe(false);
   });
 
   it("canonicalizes the authenticated root to its current daily page", () => {

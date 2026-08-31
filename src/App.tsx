@@ -79,6 +79,16 @@ function apiPath(route: RouteState): string {
     : path;
 }
 
+function latestDailyApiPath(route: RouteState): string {
+  return route.repository
+    ? `/api/public/repositories/${encodeURIComponent(route.repository)}/latest-daily`
+    : "/api/public/latest-daily";
+}
+
+function repositoryOverviewPath(repository: string): string {
+  return `/repo/${encodeURIComponent(repository)}/`;
+}
+
 function formatPeriod(data: PeriodResponse): string {
   const start = new Date(data.period.start);
   const end = new Date(new Date(data.period.endExclusive).getTime() - 1000);
@@ -151,7 +161,7 @@ function LatestDaily({
   return (
     <section className="daily-feed" aria-labelledby="daily-feed-title">
       <header className="daily-feed-header">
-        <h1 id="daily-feed-title">Recent changes</h1>
+        <h1 id="daily-feed-title">{route.repository ?? "Recent changes"}</h1>
       </header>
 
       <div className="daily-feed-list">
@@ -169,7 +179,7 @@ function LatestDaily({
                   href={buildPath(route, {
                     period: "daily",
                     key: periodKey,
-                    repository: null,
+                    repository: route.repository,
                     cursor: null,
                   })}
                 >
@@ -211,7 +221,7 @@ function LatestDaily({
         href={buildPath(route, {
           period: "daily",
           key: latestKey,
-          repository: null,
+          repository: route.repository,
           cursor: null,
         })}
       >
@@ -243,10 +253,14 @@ function ChangeCard({
           </div>
           <h2>
             <a
-              href={buildPath(route, {
-                repository: record.repository.name,
-                cursor: null,
-              })}
+              href={
+                route.scope === "public"
+                  ? repositoryOverviewPath(record.repository.name)
+                  : buildPath(route, {
+                      repository: record.repository.name,
+                      cursor: null,
+                    })
+              }
             >
               {record.repository.name}
             </a>
@@ -313,7 +327,9 @@ function Header({
   };
   const allPath = buildPath(route, { scope: "all", cursor: null });
   const publicPath = route.isOverview
-    ? "/"
+    ? route.repository
+      ? repositoryOverviewPath(route.repository)
+      : "/"
     : buildPath(route, { scope: "public", cursor: null });
 
   return (
@@ -492,7 +508,7 @@ export function App() {
         if (route.isOverview) {
           setLatestDailyData(
             await fetchJson<LatestDailyResponse>(
-              "/api/public/latest-daily",
+              latestDailyApiPath(route),
               signal,
             ),
           );
