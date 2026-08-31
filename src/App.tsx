@@ -494,12 +494,6 @@ function Header({
         aria-label="View options"
       >
         <nav className="period-nav" aria-label="Period">
-          <a
-            href={overviewPath(route.scope, null, true)}
-            aria-current={route.isRepositoryIndex ? "page" : undefined}
-          >
-            Repos
-          </a>
           {(Object.keys(periodLabels) as PeriodType[]).map((period) => (
             <a
               key={period}
@@ -513,6 +507,12 @@ function Header({
               {periodLabels[period]}
             </a>
           ))}
+          <a
+            href={overviewPath(route.scope, null, true)}
+            aria-current={route.isRepositoryIndex ? "page" : undefined}
+          >
+            Repos
+          </a>
         </nav>
         {!route.isOverview && (
           <>
