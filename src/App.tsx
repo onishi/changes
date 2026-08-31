@@ -4,6 +4,7 @@ import {
   currentPeriodKey,
   isBeforeDataCutoffPeriod,
   isFuturePeriod,
+  keyboardShortcutPath,
   parseRoute,
   periodKeyForDate,
 } from "./routes";
@@ -599,6 +600,35 @@ export function App() {
         }),
       );
     }
+  }, [data, route]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
+        return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("input, textarea, select, [contenteditable='true']")
+      ) {
+        return;
+      }
+      const path = keyboardShortcutPath(
+        route,
+        event.key,
+        data
+          ? {
+              previousKey: data.period.previousKey,
+              nextKey: data.period.nextKey,
+            }
+          : undefined,
+      );
+      if (!path) return;
+      event.preventDefault();
+      window.location.href = path;
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, [data, route]);
 
   const requestSync = () => {

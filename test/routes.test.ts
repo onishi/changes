@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildPath, isOverviewPath, parseRoute } from "../src/routes";
+import {
+  buildPath,
+  isOverviewPath,
+  keyboardShortcutPath,
+  parseRoute,
+} from "../src/routes";
 
 describe("frontend routes", () => {
   it("keeps the public roots on the overview", () => {
@@ -69,5 +74,33 @@ describe("frontend routes", () => {
         { period: "monthly" },
       ),
     ).toBe("/monthly/2026-05");
+  });
+
+  it("builds period and previous/next keyboard shortcut paths", () => {
+    const route = parseRoute({ pathname: "/daily/2026-08-20", search: "" });
+    const navigation = {
+      previousKey: "2026-08-19",
+      nextKey: "2026-08-21",
+    };
+    expect(keyboardShortcutPath(route, "p", navigation)).toBe(
+      "/daily/2026-08-19",
+    );
+    expect(keyboardShortcutPath(route, "N", navigation)).toBe(
+      "/daily/2026-08-21",
+    );
+    expect(keyboardShortcutPath(route, "w", navigation)).toBe(
+      "/weekly/2026-08-16",
+    );
+    expect(keyboardShortcutPath(route, "m", navigation)).toBe(
+      "/monthly/2026-08",
+    );
+    expect(keyboardShortcutPath(route, "d", navigation)).toBeNull();
+  });
+
+  it("supports period shortcuts but not navigation shortcuts on overviews", () => {
+    const route = parseRoute({ pathname: "/all/", search: "" });
+    expect(keyboardShortcutPath(route, "d")).toBe(`/all/daily/${route.key}`);
+    expect(keyboardShortcutPath(route, "n")).toBeNull();
+    expect(keyboardShortcutPath(route, "p")).toBeNull();
   });
 });

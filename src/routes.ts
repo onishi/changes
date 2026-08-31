@@ -165,3 +165,32 @@ export function isBeforeDataCutoffPeriod(
 ): boolean {
   return isPeriodKeyBeforeDataCutoff(type, key);
 }
+
+export function keyboardShortcutPath(
+  route: RouteState,
+  key: string,
+  periodNavigation?: { previousKey: string; nextKey: string },
+): string | null {
+  const periodByKey: Partial<Record<string, PeriodType>> = {
+    d: "daily",
+    w: "weekly",
+    m: "monthly",
+  };
+  const period = periodByKey[key.toLowerCase()];
+  if (period) {
+    if (!route.isOverview && route.period === period) return null;
+    return buildPath(route, { period, cursor: null });
+  }
+  if (route.isOverview || !periodNavigation) return null;
+  if (key.toLowerCase() === "p") {
+    return isBeforeDataCutoffPeriod(route.period, periodNavigation.previousKey)
+      ? null
+      : buildPath(route, { key: periodNavigation.previousKey, cursor: null });
+  }
+  if (key.toLowerCase() === "n") {
+    return isFuturePeriod(route.period, route.key)
+      ? null
+      : buildPath(route, { key: periodNavigation.nextKey, cursor: null });
+  }
+  return null;
+}
