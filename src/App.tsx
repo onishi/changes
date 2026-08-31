@@ -165,11 +165,20 @@ function LatestDaily({
               key={periodKey}
             >
               <h2 id={`daily-feed-day-${periodKey}`}>
-                <time dateTime={periodKey}>
-                  {dateFormatter.format(
-                    new Date(`${periodKey}T00:00:00+09:00`),
-                  )}
-                </time>
+                <a
+                  href={buildPath(route, {
+                    period: "daily",
+                    key: periodKey,
+                    repository: null,
+                    cursor: null,
+                  })}
+                >
+                  <time dateTime={periodKey}>
+                    {dateFormatter.format(
+                      new Date(`${periodKey}T00:00:00+09:00`),
+                    )}
+                  </time>
+                </a>
               </h2>
               {records.map((record) => (
                 <a
