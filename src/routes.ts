@@ -170,7 +170,13 @@ export function keyboardShortcutPath(
   route: RouteState,
   key: string,
   periodNavigation?: { previousKey: string; nextKey: string },
+  now = new Date(),
 ): string | null {
+  if (key.toLowerCase() === "t") {
+    const latestKey = currentPeriodKey(route.period, now);
+    if (!route.isOverview && route.key === latestKey) return null;
+    return buildPath(route, { key: latestKey, cursor: null });
+  }
   const periodByKey: Partial<Record<string, PeriodType>> = {
     d: "daily",
     w: "weekly",

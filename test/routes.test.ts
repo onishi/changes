@@ -103,4 +103,26 @@ describe("frontend routes", () => {
     expect(keyboardShortcutPath(route, "n")).toBeNull();
     expect(keyboardShortcutPath(route, "p")).toBeNull();
   });
+
+  it("keeps the period while moving to today with the keyboard shortcut", () => {
+    const now = new Date("2026-08-31T12:00:00+09:00");
+    const daily = parseRoute({ pathname: "/daily/2026-08-20", search: "" });
+    const weekly = parseRoute({
+      pathname: "/weekly/2026-08-16",
+      search: "",
+    });
+    const monthly = parseRoute({
+      pathname: "/monthly/2026-07",
+      search: "",
+    });
+    expect(keyboardShortcutPath(daily, "t", undefined, now)).toBe(
+      "/daily/2026-08-31",
+    );
+    expect(keyboardShortcutPath(weekly, "T", undefined, now)).toBe(
+      "/weekly/2026-08-30",
+    );
+    expect(keyboardShortcutPath(monthly, "t", undefined, now)).toBe(
+      "/monthly/2026-08",
+    );
+  });
 });
