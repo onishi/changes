@@ -46,7 +46,7 @@ async function loadBootstrapData(
       bootstrap.latestDailyData = await getLatestDailyRecords({
         env,
         scope: "public",
-        limit: 5,
+        days: 5,
       });
       return bootstrap;
     }

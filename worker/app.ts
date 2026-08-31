@@ -133,7 +133,7 @@ app.get("/api/public/latest-daily", async (context) => {
     await getLatestDailyRecords({
       env: context.env,
       scope: "public",
-      limit: 5,
+      days: 5,
     }),
   );
 });

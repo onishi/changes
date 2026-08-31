@@ -367,10 +367,27 @@ main {
   border-top: 3px solid var(--ink);
 }
 
+.daily-feed-day {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  border-bottom: 1px solid var(--line);
+}
+
+.daily-feed-day > h2 {
+  margin: 0;
+  padding: 29px 12px;
+  color: var(--muted);
+  font-family: "DM Mono", monospace;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
 .daily-feed-item {
   position: relative;
   display: grid;
-  grid-template-columns: 190px minmax(160px, 0.55fr) minmax(280px, 1fr) 32px;
+  grid-column: 2;
+  grid-template-columns: minmax(160px, 0.55fr) minmax(280px, 1fr) 110px 32px;
   align-items: start;
   gap: 28px;
   padding: 27px 12px;
@@ -395,12 +412,11 @@ main {
   font-size: 0.65rem;
 }
 
-.daily-feed-meta time {
-  color: var(--ink);
-  font-weight: 500;
+.daily-feed-day .daily-feed-item:last-child {
+  border-bottom: 0;
 }
 
-.daily-feed-item h2 {
+.daily-feed-item h3 {
   margin: 0;
   font-family: "Newsreader", Georgia, serif;
   font-size: clamp(1.25rem, 2.2vw, 1.75rem);
@@ -830,7 +846,7 @@ footer {
   }
 
   .daily-feed-item {
-    grid-template-columns: 150px minmax(150px, 0.5fr) minmax(240px, 1fr) 24px;
+    grid-template-columns: minmax(150px, 0.5fr) minmax(240px, 1fr) 90px 24px;
     gap: 20px;
   }
 
@@ -879,7 +895,7 @@ footer {
 
   .daily-feed-item {
     margin-right: -16px;
-    margin-left: -16px;
+    margin-left: 0;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 10px 18px;
     padding: 22px 16px;
@@ -894,7 +910,19 @@ footer {
     grid-column: 1;
   }
 
-  .daily-feed-item h2 {
+  .daily-feed-day {
+    grid-template-columns: 1fr;
+  }
+
+  .daily-feed-day > h2 {
+    padding: 22px 0 12px;
+  }
+
+  .daily-feed-item {
+    grid-column: 1;
+  }
+
+  .daily-feed-item h3 {
     grid-column: 1;
   }
 

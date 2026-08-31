@@ -140,45 +140,63 @@ function LatestDaily({
   route: RouteState;
 }) {
   const latestKey = data.records[0]?.periodKey ?? currentPeriodKey("daily");
+  const recordsByDay = Array.from(
+    data.records.reduce((groups, record) => {
+      const records = groups.get(record.periodKey) ?? [];
+      records.push(record);
+      groups.set(record.periodKey, records);
+      return groups;
+    }, new Map<string, ChangeRecord[]>()),
+  );
   return (
     <section className="daily-feed" aria-labelledby="daily-feed-title">
       <header className="daily-feed-header">
         <div>
-          <p className="section-label">Daily</p>
-          <h1 id="daily-feed-title">Latest changes</h1>
+          <p className="section-label">Overview</p>
+          <h1 id="daily-feed-title">Recent changes</h1>
         </div>
-        <p>The five latest entries from repository daily logs</p>
+        <p>Repository updates from the last five days, grouped by day</p>
       </header>
 
       <div className="daily-feed-list">
         {data.records.length === 0 ? (
           <p className="daily-feed-empty">No changes yet.</p>
         ) : (
-          data.records.map((record) => (
-            <a
-              className="daily-feed-item"
-              href={buildPath(route, {
-                period: "daily",
-                key: record.periodKey,
-                repository: record.repository.name,
-                cursor: null,
-              })}
-              key={record.id}
+          recordsByDay.map(([periodKey, records]) => (
+            <section
+              className="daily-feed-day"
+              aria-labelledby={`daily-feed-day-${periodKey}`}
+              key={periodKey}
             >
-              <div className="daily-feed-meta">
-                <time dateTime={record.periodKey}>
+              <h2 id={`daily-feed-day-${periodKey}`}>
+                <time dateTime={periodKey}>
                   {dateFormatter.format(
-                    new Date(`${record.periodKey}T00:00:00+09:00`),
+                    new Date(`${periodKey}T00:00:00+09:00`),
                   )}
                 </time>
-                <span>{record.commitCount} commits</span>
-              </div>
-              <h2>{record.repository.name}</h2>
-              <p>{summaryPreview(record)}</p>
-              <span className="daily-feed-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
+              </h2>
+              {records.map((record) => (
+                <a
+                  className="daily-feed-item"
+                  href={buildPath(route, {
+                    period: "daily",
+                    key: record.periodKey,
+                    repository: record.repository.name,
+                    cursor: null,
+                  })}
+                  key={record.id}
+                >
+                  <h3>{record.repository.name}</h3>
+                  <p>{summaryPreview(record)}</p>
+                  <div className="daily-feed-meta">
+                    <span>{record.commitCount} commits</span>
+                  </div>
+                  <span className="daily-feed-arrow" aria-hidden="true">
+                    →
+                  </span>
+                </a>
+              ))}
+            </section>
           ))
         )}
       </div>
@@ -347,7 +365,11 @@ function Header({
             <a
               key={period}
               href={buildPath(route, { period, cursor: null })}
-              aria-current={route.period === period ? "page" : undefined}
+              aria-current={
+                !route.isOverview && route.period === period
+                  ? "page"
+                  : undefined
+              }
             >
               {periodLabels[period]}
             </a>

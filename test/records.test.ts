@@ -87,8 +87,15 @@ function testEnv(): Env {
 }
 
 describe("change record aggregation and public boundary", () => {
-  it("returns only the five newest daily records across dates", async () => {
+  it("returns every repository record from the five most recent days", async () => {
     await insertRepository(publicRepository);
+    await insertRepository({
+      ...publicRepository,
+      id: "repo_public_second",
+      name: "another-project",
+      full_name: "onishi/another-project",
+      html_url: "https://github.com/onishi/another-project",
+    });
     const committedAt = Array.from(
       { length: 6 },
       (_, index) =>
@@ -105,21 +112,42 @@ describe("change record aggregation and public boundary", () => {
       ),
     );
     await rebuildAffectedRecords(testEnv(), publicRepository, committedAt);
+    const secondRepository = {
+      ...publicRepository,
+      id: "repo_public_second",
+      name: "another-project",
+      full_name: "onishi/another-project",
+      html_url: "https://github.com/onishi/another-project",
+    };
+    await insertCommit(
+      secondRepository,
+      "same-day",
+      "2026-08-18T08:00:00.000Z",
+      "Another repository change",
+    );
+    await rebuildAffectedRecords(testEnv(), secondRepository, [
+      "2026-08-18T08:00:00.000Z",
+    ]);
 
     const result = await getLatestDailyRecords({
       env: testEnv(),
       scope: "public",
-      limit: 5,
+      days: 5,
+      now: new Date("2026-08-20T12:00:00.000Z"),
     });
 
-    expect(result.records).toHaveLength(5);
+    expect(result.records).toHaveLength(6);
     expect(result.records.map((record) => record.periodKey)).toEqual([
       "2026-08-20",
       "2026-08-19",
       "2026-08-18",
+      "2026-08-18",
       "2026-08-17",
       "2026-08-16",
     ]);
+    expect(result.records.map((record) => record.repository.name)).toContain(
+      "another-project",
+    );
     expect(
       result.records.every((record) => record.periodType === "daily"),
     ).toBe(true);

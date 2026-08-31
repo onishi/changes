@@ -124,9 +124,17 @@ function changeRecordFromRow(
 export async function getLatestDailyRecords(options: {
   env: Env;
   scope: Scope;
-  limit?: number;
+  days?: number;
+  now?: Date;
 }): Promise<LatestDailyResponse> {
-  const limit = Math.min(Math.max(options.limit ?? 5, 1), 20);
+  const days = Math.min(Math.max(options.days ?? 5, 1), 31);
+  const today = periodBoundsForRoute(
+    "daily",
+    currentPeriodKey("daily", options.now),
+  );
+  const recentStart = new Date(
+    new Date(today.start).getTime() - (days - 1) * 24 * 60 * 60 * 1000,
+  ).toISOString();
   const visibility =
     options.scope === "public" ? "AND r.visibility = 'public'" : "";
   const result = await options.env.DB.prepare(
@@ -136,11 +144,12 @@ export async function getLatestDailyRecords(options: {
      FROM change_records cr
      JOIN repositories r ON r.id = cr.repository_id
      WHERE cr.scope = ? AND cr.period_type = 'daily'
+       AND cr.period_start >= ? AND cr.period_start < ?
        AND cr.period_start >= ? AND r.deleted_at IS NULL ${visibility}
-     ORDER BY cr.last_committed_at DESC, cr.repository_id ASC
-     LIMIT ?`,
+     ORDER BY cr.period_start DESC, cr.last_committed_at DESC,
+              r.name COLLATE NOCASE ASC`,
   )
-    .bind(options.scope, DATA_CUTOFF_INSTANT, limit)
+    .bind(options.scope, recentStart, today.endExclusive, DATA_CUTOFF_INSTANT)
     .all<RecordWithRepository>();
 
   return {
