@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import {
   buildPath,
   currentPeriodKey,
@@ -8,6 +15,7 @@ import {
   parseRoute,
   periodKeyForDate,
 } from "./routes";
+import { isNavigableLinkClick } from "./navigation";
 import { dataCutoffPeriodKey } from "../shared/data-cutoff";
 import type {
   BootstrapData,
@@ -425,17 +433,21 @@ function Header({
   session,
   syncing,
   onSync,
+  navigate,
 }: {
   route: RouteState;
   session: SessionResponse | null;
   syncing: boolean;
   onSync: () => void;
+  navigate: (path: string) => void;
 }) {
   const onDateChange = (value: string) => {
-    window.location.href = buildPath(route, {
-      key: periodKeyForDate(route.period, value),
-      cursor: null,
-    });
+    navigate(
+      buildPath(route, {
+        key: periodKeyForDate(route.period, value),
+        cursor: null,
+      }),
+    );
   };
   const allPath = route.isOverview
     ? overviewPath("all", route.repository, route.isRepositoryIndex)
@@ -592,24 +604,48 @@ function Loading() {
   );
 }
 
+function readRoute(): RouteState {
+  return parseRoute(window.location, (canonicalPath) => {
+    window.history.replaceState(null, "", canonicalPath);
+  });
+}
+
 export function App() {
-  const route = useMemo(
-    () =>
-      parseRoute(window.location, (path) =>
-        window.history.replaceState(null, "", path),
-      ),
+  const [route, setRoute] = useState<RouteState>(() => readRoute());
+  const initialRouteRef = useRef(route);
+
+  const navigate = useCallback(
+    (path: string, options?: { replace?: boolean }) => {
+      const current = `${window.location.pathname}${window.location.search}`;
+      if (path === current) return;
+      if (options?.replace) {
+        window.history.replaceState(null, "", path);
+      } else {
+        window.history.pushState(null, "", path);
+      }
+      setRoute(readRoute());
+    },
     [],
   );
+
+  useEffect(() => {
+    const onPopState = () => setRoute(readRoute());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
   const bootstrap = useMemo<BootstrapData | null>(() => {
     const initial = window.__CHANGES_BOOTSTRAP__;
     const path = `${window.location.pathname}${window.location.search}`;
     return initial?.path === path ? initial : null;
   }, []);
-  const hasCompleteBootstrap = route.isRepositoryIndex
-    ? Boolean(bootstrap?.repositoriesData || bootstrap?.error)
-    : route.isOverview
-      ? Boolean(bootstrap?.latestDailyData || bootstrap?.error)
-      : Boolean(bootstrap?.periodData || bootstrap?.error);
+  const hasCompleteBootstrap =
+    route === initialRouteRef.current &&
+    (route.isRepositoryIndex
+      ? Boolean(bootstrap?.repositoriesData || bootstrap?.error)
+      : route.isOverview
+        ? Boolean(bootstrap?.latestDailyData || bootstrap?.error)
+        : Boolean(bootstrap?.periodData || bootstrap?.error));
   const [data, setData] = useState<PeriodResponse | null>(
     bootstrap?.periodData ?? null,
   );
@@ -626,6 +662,9 @@ export function App() {
   const load = useCallback(
     async (signal?: AbortSignal) => {
       setError(null);
+      setData(null);
+      setLatestDailyData(null);
+      setRepositoriesData(null);
       try {
         if (route.isRepositoryIndex) {
           setRepositoriesData(
@@ -714,11 +753,11 @@ export function App() {
       );
       if (!path) return;
       event.preventDefault();
-      window.location.href = path;
+      navigate(path);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [data, route]);
+  }, [data, route, navigate]);
 
   const requestSync = () => {
     setSyncing(true);
@@ -736,13 +775,38 @@ export function App() {
       .finally(() => setSyncing(false));
   };
 
+  const handleLinkClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const anchor = target.closest("a");
+    if (!anchor) return;
+    const hrefAttr = anchor.getAttribute("href");
+    const url = hrefAttr ? new URL(anchor.href) : null;
+    const navigable = isNavigableLinkClick({
+      button: event.button,
+      defaultPrevented: event.defaultPrevented,
+      metaKey: event.metaKey,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
+      href: hrefAttr,
+      target: anchor.getAttribute("target"),
+      download: anchor.hasAttribute("download"),
+      sameOrigin: url ? url.origin === window.location.origin : false,
+    });
+    if (!navigable || !url) return;
+    event.preventDefault();
+    navigate(`${url.pathname}${url.search}`);
+  };
+
   return (
-    <div className="app-shell">
+    <div className="app-shell" onClick={handleLinkClick}>
       <Header
         route={route}
         session={session}
         syncing={syncing}
         onSync={requestSync}
+        navigate={navigate}
       />
 
       <main>
