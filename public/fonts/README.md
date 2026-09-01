@@ -11,11 +11,15 @@ back to the system font stack, and each `@font-face` declares a
 `unicode-range`, so a browser downloads a subset only when the page actually
 uses characters from it.
 
-| Family     | Files                                     | Notes                                 |
-| ---------- | ----------------------------------------- | ------------------------------------- |
-| DM Mono    | `dm-mono-{300,400,500}-{latin,latin-ext}` | Static instances, one file per weight |
-| Manrope    | `manrope-variable-{latin,latin-ext}`      | Variable font, covers weights 400–700 |
-| Newsreader | `newsreader-variable-{latin,latin-ext}`   | Variable font, covers weights 400–500 |
+| Family     | Files                                   | Notes                                 |
+| ---------- | --------------------------------------- | ------------------------------------- |
+| DM Mono    | `dm-mono-{400,500}-{latin,latin-ext}`   | Static instances, one file per weight |
+| Manrope    | `manrope-variable-{latin,latin-ext}`    | Variable font, covers weights 400–700 |
+| Newsreader | `newsreader-variable-{latin,latin-ext}` | Variable font, covers weights 400–500 |
+
+Only the weights the app actually uses are requested — DM Mono 400/500 (the
+UI never sets `font-weight: 300`, so that static instance was dropped),
+Manrope 400–700, Newsreader 400–500.
 
 Google Fonts serves the same variable file for each requested weight, so
 Manrope and Newsreader are stored once and declared with a weight range
