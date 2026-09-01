@@ -610,6 +610,150 @@ function readRoute(): RouteState {
   });
 }
 
+export interface AppViewProps {
+  route: RouteState;
+  session: SessionResponse | null;
+  syncing: boolean;
+  onSync: () => void;
+  navigate: (path: string) => void;
+  onLinkClick: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  error: string | null;
+  onRetry: () => void;
+  data: PeriodResponse | null;
+  latestDailyData: LatestDailyResponse | null;
+  repositoriesData: RepositoriesResponse | null;
+}
+
+// Pure rendering of the app shell for a given state, shared by the client
+// (App, below) and the worker's SSR render (worker/render.tsx). Keeping
+// this free of window/document access is what makes it safe to render on
+// the server.
+export function AppView({
+  route,
+  session,
+  syncing,
+  onSync,
+  navigate,
+  onLinkClick,
+  error,
+  onRetry,
+  data,
+  latestDailyData,
+  repositoriesData,
+}: AppViewProps) {
+  return (
+    <div className="app-shell" onClick={onLinkClick}>
+      <Header
+        route={route}
+        session={session}
+        syncing={syncing}
+        onSync={onSync}
+        navigate={navigate}
+      />
+
+      <main>
+        {error ? (
+          <section className="error-state" role="alert">
+            <p className="section-label">Could not load</p>
+            <h1>Could not load changes</h1>
+            <p>{error}</p>
+            <button type="button" onClick={onRetry}>
+              Try again
+            </button>
+          </section>
+        ) : route.isRepositoryIndex ? (
+          repositoriesData ? (
+            <RepositoryIndex data={repositoriesData} route={route} />
+          ) : (
+            <Loading />
+          )
+        ) : route.isOverview ? (
+          latestDailyData ? (
+            <LatestDaily data={latestDailyData} route={route} />
+          ) : (
+            <Loading />
+          )
+        ) : !data ? (
+          <Loading />
+        ) : (
+          <>
+            <section className="hero">
+              <div>
+                <p className="section-label">
+                  {route.scope === "all"
+                    ? "Public + private"
+                    : "Public changelog"}
+                  {route.repository && (
+                    <>
+                      {" · "}
+                      {route.scope === "public" ? (
+                        <a href={overviewPath("public", route.repository)}>
+                          {route.repository}
+                        </a>
+                      ) : (
+                        route.repository
+                      )}
+                    </>
+                  )}
+                </p>
+                <h1>{formatPeriod(data)}</h1>
+              </div>
+              <dl className="stats">
+                <div>
+                  <dt>Commits</dt>
+                  <dd>{data.stats.commit_count}</dd>
+                </div>
+                <div>
+                  <dt>Repositories</dt>
+                  <dd>{data.stats.repository_count}</dd>
+                </div>
+              </dl>
+            </section>
+
+            <SyncNote data={data} />
+
+            <PeriodPager route={route} data={data} />
+
+            <section className="records" aria-label="Change records">
+              {data.records.length === 0 ? (
+                <div className="empty-state">
+                  <span aria-hidden="true">○</span>
+                  <h2>No changes in this period</h2>
+                  <p>Try the previous or next period.</p>
+                </div>
+              ) : (
+                data.records.map((record) => (
+                  <ChangeCard key={record.id} record={record} route={route} />
+                ))
+              )}
+            </section>
+
+            {(route.cursor || data.nextCursor) && (
+              <nav className="record-pager" aria-label="Change record pages">
+                {route.cursor && (
+                  <a href={buildPath(route, { cursor: null })}>First 50</a>
+                )}
+                {data.nextCursor && (
+                  <a href={buildPath(route, { cursor: data.nextCursor })}>
+                    View next 50 →
+                  </a>
+                )}
+              </nav>
+            )}
+
+            <PeriodPager route={route} data={data} />
+          </>
+        )}
+      </main>
+
+      <footer>
+        <span>changes.wagaya.org</span>
+        <span>Times shown in Asia/Tokyo</span>
+      </footer>
+    </div>
+  );
+}
+
 export function App() {
   const [route, setRoute] = useState<RouteState>(() => readRoute());
   const initialRouteRef = useRef(route);
@@ -800,114 +944,18 @@ export function App() {
   };
 
   return (
-    <div className="app-shell" onClick={handleLinkClick}>
-      <Header
-        route={route}
-        session={session}
-        syncing={syncing}
-        onSync={requestSync}
-        navigate={navigate}
-      />
-
-      <main>
-        {error ? (
-          <section className="error-state" role="alert">
-            <p className="section-label">Could not load</p>
-            <h1>Could not load changes</h1>
-            <p>{error}</p>
-            <button type="button" onClick={() => void load()}>
-              Try again
-            </button>
-          </section>
-        ) : route.isRepositoryIndex ? (
-          repositoriesData ? (
-            <RepositoryIndex data={repositoriesData} route={route} />
-          ) : (
-            <Loading />
-          )
-        ) : route.isOverview ? (
-          latestDailyData ? (
-            <LatestDaily data={latestDailyData} route={route} />
-          ) : (
-            <Loading />
-          )
-        ) : !data ? (
-          <Loading />
-        ) : (
-          <>
-            <section className="hero">
-              <div>
-                <p className="section-label">
-                  {route.scope === "all"
-                    ? "Public + private"
-                    : "Public changelog"}
-                  {route.repository && (
-                    <>
-                      {" · "}
-                      {route.scope === "public" ? (
-                        <a href={overviewPath("public", route.repository)}>
-                          {route.repository}
-                        </a>
-                      ) : (
-                        route.repository
-                      )}
-                    </>
-                  )}
-                </p>
-                <h1>{formatPeriod(data)}</h1>
-              </div>
-              <dl className="stats">
-                <div>
-                  <dt>Commits</dt>
-                  <dd>{data.stats.commit_count}</dd>
-                </div>
-                <div>
-                  <dt>Repositories</dt>
-                  <dd>{data.stats.repository_count}</dd>
-                </div>
-              </dl>
-            </section>
-
-            <SyncNote data={data} />
-
-            <PeriodPager route={route} data={data} />
-
-            <section className="records" aria-label="Change records">
-              {data.records.length === 0 ? (
-                <div className="empty-state">
-                  <span aria-hidden="true">○</span>
-                  <h2>No changes in this period</h2>
-                  <p>Try the previous or next period.</p>
-                </div>
-              ) : (
-                data.records.map((record) => (
-                  <ChangeCard key={record.id} record={record} route={route} />
-                ))
-              )}
-            </section>
-
-            {(route.cursor || data.nextCursor) && (
-              <nav className="record-pager" aria-label="Change record pages">
-                {route.cursor && (
-                  <a href={buildPath(route, { cursor: null })}>First 50</a>
-                )}
-                {data.nextCursor && (
-                  <a href={buildPath(route, { cursor: data.nextCursor })}>
-                    View next 50 →
-                  </a>
-                )}
-              </nav>
-            )}
-
-            <PeriodPager route={route} data={data} />
-          </>
-        )}
-      </main>
-
-      <footer>
-        <span>changes.wagaya.org</span>
-        <span>Times shown in Asia/Tokyo</span>
-      </footer>
-    </div>
+    <AppView
+      route={route}
+      session={session}
+      syncing={syncing}
+      onSync={requestSync}
+      navigate={navigate}
+      onLinkClick={handleLinkClick}
+      error={error}
+      onRetry={() => void load()}
+      data={data}
+      latestDailyData={latestDailyData}
+      repositoriesData={repositoriesData}
+    />
   );
 }

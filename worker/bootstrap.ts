@@ -4,6 +4,7 @@ import {
   getPeriodRecords,
   listRepositories,
 } from "./api";
+import { renderAppHtml } from "./render";
 import { parseRoute } from "../src/routes";
 import type { BootstrapData, RouteState } from "../src/types";
 
@@ -84,6 +85,7 @@ function injectBootstrap(
   response: Response,
   bootstrap: BootstrapData,
   nonce: string,
+  appHtml: string,
 ): Response {
   const script = `<script nonce="${nonce}">window.__CHANGES_BOOTSTRAP__=${serializeBootstrap(bootstrap)};</script>`;
   return new HTMLRewriter()
@@ -99,6 +101,13 @@ function injectBootstrap(
     .on("head", {
       element(element) {
         element.append(script, { html: true });
+      },
+    })
+    .on("#root", {
+      element(element) {
+        // Server-rendered markup for the current route, so the response
+        // shows real content before the client bundle hydrates it.
+        element.setInnerContent(appHtml, { html: true });
       },
     })
     .transform(response);
@@ -152,5 +161,6 @@ export async function serveBootstrappedShell(options: {
     }),
     bootstrap,
     options.nonce,
+    renderAppHtml(route, bootstrap),
   );
 }

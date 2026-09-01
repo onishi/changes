@@ -1,5 +1,5 @@
 import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
+import { hydrateRoot } from "react-dom/client";
 import { App } from "./App";
 import "./styles.css";
 
@@ -9,7 +9,8 @@ if (!root) {
   throw new Error("#root element was not found");
 }
 
-createRoot(root).render(
+hydrateRoot(
+  root,
   <StrictMode>
     <App />
   </StrictMode>,

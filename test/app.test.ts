@@ -210,11 +210,28 @@ describe("HTTP access boundaries", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toContain("public");
 
-    const bootstrap = extractBootstrap(await response.text());
+    const html = await response.text();
+    const bootstrap = extractBootstrap(html);
     expect(bootstrap.path).toBe("/");
     expect(bootstrap.latestDailyData).not.toBeNull();
     expect(bootstrap.periodData).toBeNull();
     expect(bootstrap.error).toBeNull();
+
+    expect(html).not.toContain('<div id="root"></div>');
+    expect(html).toContain('<div id="root"><div class="app-shell"');
+    expect(html).toContain("No changes yet.");
+  });
+
+  it("server-renders period page content into the HTML shell", async () => {
+    const response = await app.request("/daily/2026-08-20", {}, testEnv());
+    expect(response.status).toBe(200);
+    const html = await response.text();
+
+    expect(html).toContain('<div id="root"><div class="app-shell"');
+    // The heading and stats the client would otherwise only paint after
+    // fetching /api/public/periods/daily/2026-08-20 client-side.
+    expect(html).toContain("Aug 20, 2026");
+    expect(html).toContain("No changes in this period");
   });
 
   it("embeds repository overview data and exposes its latest-daily API", async () => {
@@ -242,13 +259,15 @@ describe("HTTP access boundaries", () => {
 
     const response = await app.request("/repo/", {}, testEnv());
     expect(response.status).toBe(200);
-    const bootstrap = extractBootstrap(await response.text());
+    const html = await response.text();
+    const bootstrap = extractBootstrap(html);
     expect(bootstrap.path).toBe("/repo/");
     expect(bootstrap.repositoriesData?.repositories).toHaveLength(1);
     expect(bootstrap.repositoriesData?.repositories[0]?.name).toBe("kinki-zoo");
     expect(bootstrap.latestDailyData).toBeNull();
     expect(bootstrap.periodData).toBeNull();
     expect(bootstrap.error).toBeNull();
+    expect(html).toContain("kinki-zoo");
 
     const apiResponse = await app.request(
       "/api/public/repositories",
