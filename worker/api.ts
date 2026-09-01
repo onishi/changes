@@ -248,6 +248,19 @@ export async function getPeriodRecords(options: {
     throw new Error("Future periods are not available.");
   }
   const cursor = parseCursor(options.cursor ?? null);
+
+  // Independent of the repository lookup below, so kick it off now instead
+  // of waiting for that round trip to finish first.
+  const latestRunPromise = options.env.DB.prepare(
+    `SELECT status, started_at, completed_at
+     FROM sync_runs WHERE job_type = 'sync-owner'
+     ORDER BY started_at DESC LIMIT 1`,
+  ).first<{
+    status: "running" | "succeeded" | "failed";
+    started_at: string;
+    completed_at: string | null;
+  }>();
+
   const repository = options.repositoryName
     ? await findRepository(
         options.env.DB,
@@ -289,18 +302,63 @@ export async function getPeriodRecords(options: {
     );
   }
 
-  const recordsResult = await options.env.DB.prepare(
-    `SELECT cr.*, r.name AS repository_name, r.full_name AS repository_full_name,
+  const statsConditions = [
+    "cr.scope = ?",
+    "cr.period_type = ?",
+    "cr.period_start = ?",
+    "r.deleted_at IS NULL",
+  ];
+  const statsBindings: string[] = [
+    options.scope,
+    options.periodType,
+    bounds.start,
+  ];
+  if (options.scope === "public") {
+    statsConditions.push("r.visibility = 'public'");
+  }
+  if (repository) {
+    statsConditions.push("cr.repository_id = ?");
+    statsBindings.push(repository.id);
+  }
+
+  const syncConditions = ["deleted_at IS NULL"];
+  const syncBindings: string[] = [];
+  if (options.scope === "public") syncConditions.push("visibility = 'public'");
+  if (repository) {
+    syncConditions.push("id = ?");
+    syncBindings.push(repository.id);
+  }
+
+  // These three only depend on the repository lookup above, not on each
+  // other, so run them concurrently instead of one after another.
+  const [recordsResult, stats, sync] = await Promise.all([
+    options.env.DB.prepare(
+      `SELECT cr.*, r.name AS repository_name, r.full_name AS repository_full_name,
               r.html_url AS repository_url, r.visibility AS repository_visibility,
               r.default_branch
-       FROM change_records cr
-       JOIN repositories r ON r.id = cr.repository_id
-       WHERE ${conditions.join(" AND ")}
-       ORDER BY cr.last_committed_at DESC, cr.repository_id ASC
-       LIMIT ?`,
-  )
-    .bind(...bindings, pageSize + 1)
-    .all<RecordWithRepository>();
+         FROM change_records cr
+         JOIN repositories r ON r.id = cr.repository_id
+         WHERE ${conditions.join(" AND ")}
+         ORDER BY cr.last_committed_at DESC, cr.repository_id ASC
+         LIMIT ?`,
+    )
+      .bind(...bindings, pageSize + 1)
+      .all<RecordWithRepository>(),
+    options.env.DB.prepare(
+      `SELECT COUNT(*) AS repository_count, COALESCE(SUM(cr.commit_count), 0) AS commit_count
+         FROM change_records cr
+         JOIN repositories r ON r.id = cr.repository_id
+         WHERE ${statsConditions.join(" AND ")}`,
+    )
+      .bind(...statsBindings)
+      .first<{ repository_count: number; commit_count: number }>(),
+    options.env.DB.prepare(
+      `SELECT MAX(last_synced_at) AS last_synced_at
+       FROM repositories WHERE ${syncConditions.join(" AND ")}`,
+    )
+      .bind(...syncBindings)
+      .first<{ last_synced_at: string | null }>(),
+  ]);
 
   const hasNextPage = recordsResult.results.length > pageSize;
   const records = recordsResult.results.slice(0, pageSize);
@@ -328,55 +386,7 @@ export async function getPeriodRecords(options: {
     }
   }
 
-  const statsConditions = [
-    "cr.scope = ?",
-    "cr.period_type = ?",
-    "cr.period_start = ?",
-    "r.deleted_at IS NULL",
-  ];
-  const statsBindings: string[] = [
-    options.scope,
-    options.periodType,
-    bounds.start,
-  ];
-  if (options.scope === "public") {
-    statsConditions.push("r.visibility = 'public'");
-  }
-  if (repository) {
-    statsConditions.push("cr.repository_id = ?");
-    statsBindings.push(repository.id);
-  }
-  const stats = await options.env.DB.prepare(
-    `SELECT COUNT(*) AS repository_count, COALESCE(SUM(cr.commit_count), 0) AS commit_count
-       FROM change_records cr
-       JOIN repositories r ON r.id = cr.repository_id
-       WHERE ${statsConditions.join(" AND ")}`,
-  )
-    .bind(...statsBindings)
-    .first<{ repository_count: number; commit_count: number }>();
-
-  const syncConditions = ["deleted_at IS NULL"];
-  const syncBindings: string[] = [];
-  if (options.scope === "public") syncConditions.push("visibility = 'public'");
-  if (repository) {
-    syncConditions.push("id = ?");
-    syncBindings.push(repository.id);
-  }
-  const sync = await options.env.DB.prepare(
-    `SELECT MAX(last_synced_at) AS last_synced_at
-     FROM repositories WHERE ${syncConditions.join(" AND ")}`,
-  )
-    .bind(...syncBindings)
-    .first<{ last_synced_at: string | null }>();
-  const latestRun = await options.env.DB.prepare(
-    `SELECT status, started_at, completed_at
-     FROM sync_runs WHERE job_type = 'sync-owner'
-     ORDER BY started_at DESC LIMIT 1`,
-  ).first<{
-    status: "running" | "succeeded" | "failed";
-    started_at: string;
-    completed_at: string | null;
-  }>();
+  const latestRun = await latestRunPromise;
 
   const last = records.at(-1);
   const nextCursor =
