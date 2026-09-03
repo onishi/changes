@@ -249,8 +249,9 @@ export async function listRepositoryCommitsPage(
 ): Promise<{ commits: GitHubCommit[]; hasNextPage: boolean }> {
   const token = await getInstallationToken(env);
   const query = new URLSearchParams({
+    // No author filter: on the owner's own repositories every commit counts,
+    // including ones written by co-maintainers and by AI.
     sha: repository.defaultBranch,
-    author: env.GITHUB_OWNER,
     since,
     per_page: "100",
     page: String(page),

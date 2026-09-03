@@ -186,11 +186,11 @@ export async function rebuildAffectedRecords(
 
 export function createCommitLogUrl(
   repository: Pick<RepositoryRow, "html_url">,
-  owner: string,
   bounds: PeriodBounds,
 ): string {
+  // Deliberately unfiltered by author, so the link shows the same commits the
+  // page does.
   const url = new URL(`${repository.html_url}/commits`);
-  url.searchParams.set("author", owner);
   url.searchParams.set("since", clampInstantToDataCutoff(bounds.start));
   url.searchParams.set("until", bounds.endInclusive);
   return url.toString();

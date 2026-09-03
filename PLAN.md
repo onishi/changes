@@ -56,6 +56,7 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 - [x] `changes.wagaya.org` に競合する DNS record、Custom Domain、Worker route がないことを確認する
 - [ ] Workers AI の日本語要約品質とコストを検証し、初期 AI provider を確定する
 - [ ] タイムゾーン、同期対象期間、fork/archive の扱いを設定値として確定する（週は日曜日始まりに固定）
+- [x] 同期対象コミットの方針を確定する（owner 配下は全 author、merge commit は除外）
 - [ ] private メタデータを外部 AI へ送信する運用について確認する
 
 完了条件:
@@ -82,7 +83,7 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 - [x] GitHub App user authorization、installation、session の必須 secret 名を定義する
 - [x] `wrangler types` で binding の TypeScript 型を生成する
 - [x] test runner と CI をセットアップする
-- [ ] Workers Builds または GitHub Actions + Wrangler で preview / production pipeline を用意する
+- [x] GitHub Actions + Wrangler で production への自動デプロイを用意する（preview 環境は未整備）
 - [x] health check、構造化ログ、Workers Observability の基盤を追加する
 - [x] ログを event / ID / status 中心に限定し、token・secret・本文を出力しない
 
