@@ -568,7 +568,7 @@ main {
 .period-pager {
   display: flex;
   justify-content: space-between;
-  padding: 17px 0;
+  padding: 12px 0;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   font-family: "DM Mono", monospace;
@@ -603,10 +603,12 @@ main {
 }
 
 .period-pager a {
+  padding: 8px 0;
   text-decoration: none;
 }
 
 .period-pager span[aria-disabled="true"] {
+  padding: 8px 0;
   color: #aaa497;
 }
 
@@ -782,6 +784,10 @@ main {
   margin: 0 0 28px;
   font-size: 0.78rem;
   font-weight: 700;
+}
+
+.record-pager a {
+  padding: 6px 0;
 }
 
 .empty-state,
@@ -1028,7 +1034,8 @@ footer {
   }
 
   .period-pager {
-    font-size: 0.62rem;
+    flex-wrap: wrap;
+    gap: 8px 16px;
   }
 
   footer {
