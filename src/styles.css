@@ -876,6 +876,12 @@ footer {
   text-transform: uppercase;
 }
 
+footer a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 @keyframes pulse {
   to {
     opacity: 0.25;

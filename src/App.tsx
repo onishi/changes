@@ -748,6 +748,9 @@ export function AppView({
 
       <footer>
         <span>changes.wagaya.org</span>
+        <span>
+          <a href="https://wagaya.org/">wagaya.org</a>
+        </span>
         <span>Times shown in Asia/Tokyo</span>
       </footer>
     </div>
