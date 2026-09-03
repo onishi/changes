@@ -16,6 +16,7 @@ import type { QueueMessage, Scope, SessionRow } from "./domain";
 import { randomToken } from "./lib/crypto";
 import { isPeriodType } from "./records";
 import { serveBootstrappedShell } from "./bootstrap";
+import { checkHealth } from "./monitor-health";
 
 type AppBindings = {
   Bindings: Env;
@@ -55,6 +56,7 @@ app.use("*", async (context, next) => {
 });
 
 app.get("/api/health", (context) => context.json({ status: "ok" }));
+app.get("/_monitor/health", (context) => checkHealth(context.env));
 app.get("/api/auth/login", (context) =>
   beginGitHubLogin(context.req.raw, context.env),
 );
