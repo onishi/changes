@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isNavigableLinkClick, type LinkClickInfo } from "../src/navigation";
+import {
+  horizontalSwipeDirection,
+  isNavigableLinkClick,
+  type LinkClickInfo,
+} from "../src/navigation";
 
 function clickInfo(overrides: Partial<LinkClickInfo> = {}): LinkClickInfo {
   return {
@@ -57,5 +61,29 @@ describe("isNavigableLinkClick", () => {
     expect(isNavigableLinkClick(clickInfo({ defaultPrevented: true }))).toBe(
       false,
     );
+  });
+});
+
+describe("horizontalSwipeDirection", () => {
+  const gesture = {
+    startX: 260,
+    startY: 300,
+    endX: 100,
+    endY: 320,
+    viewportWidth: 390,
+  };
+
+  it("maps left and right swipes to period navigation", () => {
+    expect(horizontalSwipeDirection(gesture)).toBe("next");
+    expect(
+      horizontalSwipeDirection({ ...gesture, startX: 100, endX: 260 }),
+    ).toBe("previous");
+  });
+
+  it("ignores short and predominantly vertical gestures", () => {
+    expect(horizontalSwipeDirection({ ...gesture, endX: 220 })).toBeNull();
+    expect(
+      horizontalSwipeDirection({ ...gesture, endX: 180, endY: 430 }),
+    ).toBeNull();
   });
 });

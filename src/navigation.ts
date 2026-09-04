@@ -26,3 +26,31 @@ export function isNavigableLinkClick(info: LinkClickInfo): boolean {
   if (!info.sameOrigin) return false;
   return true;
 }
+
+export type SwipeDirection = "previous" | "next";
+
+export interface SwipeGesture {
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  viewportWidth: number;
+}
+
+// Require a deliberate, predominantly horizontal gesture. The proportional
+// threshold keeps short movements from paging on both narrow and wide phones.
+export function horizontalSwipeDirection({
+  startX,
+  startY,
+  endX,
+  endY,
+  viewportWidth,
+}: SwipeGesture): SwipeDirection | null {
+  const deltaX = endX - startX;
+  const deltaY = endY - startY;
+  const threshold = Math.max(50, Math.min(90, viewportWidth * 0.15));
+
+  if (Math.abs(deltaX) < threshold) return null;
+  if (Math.abs(deltaX) < Math.abs(deltaY) * 1.25) return null;
+  return deltaX > 0 ? "previous" : "next";
+}

@@ -15,7 +15,7 @@ import {
   parseRoute,
   periodKeyForDate,
 } from "./routes";
-import { isNavigableLinkClick } from "./navigation";
+import { horizontalSwipeDirection, isNavigableLinkClick } from "./navigation";
 import { dataCutoffPeriodKey } from "../shared/data-cutoff";
 import type {
   BootstrapData,
@@ -904,6 +904,75 @@ export function App() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+  }, [data, route, navigate]);
+
+  useEffect(() => {
+    if (!data || route.isOverview || route.isRepositoryIndex) return;
+
+    let start: { x: number; y: number } | null = null;
+    const media = window.matchMedia("(max-width: 820px) and (pointer: coarse)");
+
+    const onTouchStart = (event: TouchEvent) => {
+      start = null;
+      if (!media.matches || event.touches.length !== 1) return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest(
+          "input, textarea, select, button, [contenteditable='true']",
+        )
+      ) {
+        return;
+      }
+
+      const touch = event.touches[0];
+      if (!touch) return;
+      // Leave the screen edges to browser back/forward gestures.
+      if (touch.clientX <= 24 || touch.clientX >= window.innerWidth - 24)
+        return;
+      start = { x: touch.clientX, y: touch.clientY };
+    };
+
+    const onTouchEnd = (event: TouchEvent) => {
+      const origin = start;
+      start = null;
+      if (!origin || event.changedTouches.length !== 1) return;
+      const touch = event.changedTouches[0];
+      if (!touch) return;
+      const direction = horizontalSwipeDirection({
+        startX: origin.x,
+        startY: origin.y,
+        endX: touch.clientX,
+        endY: touch.clientY,
+        viewportWidth: window.innerWidth,
+      });
+      if (!direction) return;
+
+      if (direction === "previous") {
+        if (isBeforeDataCutoffPeriod(route.period, data.period.previousKey)) {
+          return;
+        }
+        navigate(
+          buildPath(route, { key: data.period.previousKey, cursor: null }),
+        );
+        return;
+      }
+      if (isFuturePeriod(route.period, data.period.key)) return;
+      navigate(buildPath(route, { key: data.period.nextKey, cursor: null }));
+    };
+
+    const onTouchCancel = () => {
+      start = null;
+    };
+
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
+    window.addEventListener("touchcancel", onTouchCancel, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchend", onTouchEnd);
+      window.removeEventListener("touchcancel", onTouchCancel);
+    };
   }, [data, route, navigate]);
 
   const requestSync = () => {
