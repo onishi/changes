@@ -238,7 +238,12 @@ export async function syncRepository(
       commit.commit.committer?.date ?? commit.commit.author?.date;
     return timestamp ? [timestamp] : [];
   });
-  const summaryIds = await rebuildAffectedRecords(env, repository, timestamps);
+  const summaryIds = await rebuildAffectedRecords(
+    env,
+    repository,
+    timestamps,
+    now,
+  );
   if (summaryIds.length > 0) {
     await env.JOBS.sendBatch(
       summaryIds.map((changeRecordId) => ({

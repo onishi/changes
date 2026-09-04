@@ -22,6 +22,22 @@ function recordId(
   return `${scope}:${bounds.type}:${bounds.key}:${repositoryId}`;
 }
 
+export function isSummaryGenerationDue(
+  bounds: PeriodBounds,
+  lastGeneratedOrAttemptedAt: string | null,
+  now: string,
+): boolean {
+  if (bounds.type === "daily") return true;
+  if (Date.parse(bounds.endExclusive) <= Date.parse(now)) return true;
+  if (!lastGeneratedOrAttemptedAt) return true;
+
+  const cadence = bounds.type === "weekly" ? "daily" : "weekly";
+  return (
+    periodBoundsForInstant(cadence, lastGeneratedOrAttemptedAt).key !==
+    periodBoundsForInstant(cadence, now).key
+  );
+}
+
 async function commitsForPeriod(
   db: D1Database,
   repositoryId: string,
@@ -49,6 +65,7 @@ async function rebuildScopedRecord(
   repository: RepositoryRow,
   bounds: PeriodBounds,
   scope: Scope,
+  now: string,
 ): Promise<string | null> {
   const id = recordId(scope, bounds, repository.id);
   const commits = await commitsForPeriod(db, repository.id, bounds);
@@ -66,14 +83,16 @@ async function rebuildScopedRecord(
   );
   const existing = await db
     .prepare(
-      "SELECT source_fingerprint, summary_status FROM change_records WHERE id = ?",
+      `SELECT source_fingerprint, summary_status, generated_at, updated_at
+       FROM change_records WHERE id = ?`,
     )
     .bind(id)
     .first<{
       source_fingerprint: string;
       summary_status: ChangeRecordRow["summary_status"];
+      generated_at: string | null;
+      updated_at: string;
     }>();
-  const now = new Date().toISOString();
   const first = commits[0];
   const last = commits.at(-1);
   if (!first || !last) {
@@ -107,12 +126,12 @@ async function rebuildScopedRecord(
            prompt_version = CASE
              WHEN change_records.source_fingerprint = excluded.source_fingerprint
              THEN change_records.prompt_version ELSE NULL END,
-           generated_at = CASE
-             WHEN change_records.source_fingerprint = excluded.source_fingerprint
-             THEN change_records.generated_at ELSE NULL END,
+           generated_at = change_records.generated_at,
            summary_error = NULL,
            source_fingerprint = excluded.source_fingerprint,
-           updated_at = excluded.updated_at`,
+           updated_at = CASE
+             WHEN change_records.source_fingerprint = excluded.source_fingerprint
+             THEN change_records.updated_at ELSE excluded.updated_at END`,
       )
       .bind(
         id,
@@ -143,20 +162,24 @@ async function rebuildScopedRecord(
   ];
   await db.batch(statements);
 
-  if (
+  const needsSummary =
     !existing ||
     existing.source_fingerprint !== fingerprint ||
-    existing.summary_status === "failed"
-  ) {
-    return id;
-  }
-  return null;
+    existing.summary_status === "failed" ||
+    existing.summary_status === "pending";
+  if (!needsSummary) return null;
+
+  const cadenceAnchor = existing
+    ? (existing.generated_at ?? existing.updated_at)
+    : null;
+  return isSummaryGenerationDue(bounds, cadenceAnchor, now) ? id : null;
 }
 
 export async function rebuildAffectedRecords(
   env: Env,
   repository: RepositoryRow,
   commitTimestamps: string[],
+  now = new Date().toISOString(),
 ): Promise<string[]> {
   const uniqueBounds = new Map<string, PeriodBounds>();
   for (const timestamp of commitTimestamps) {
@@ -169,7 +192,13 @@ export async function rebuildAffectedRecords(
 
   const pendingSummaries = new Set<string>();
   for (const bounds of uniqueBounds.values()) {
-    const allId = await rebuildScopedRecord(env.DB, repository, bounds, "all");
+    const allId = await rebuildScopedRecord(
+      env.DB,
+      repository,
+      bounds,
+      "all",
+      now,
+    );
     if (allId) pendingSummaries.add(allId);
 
     const publicId = await rebuildScopedRecord(
@@ -177,6 +206,7 @@ export async function rebuildAffectedRecords(
       repository,
       bounds,
       "public",
+      now,
     );
     if (publicId) pendingSummaries.add(publicId);
   }

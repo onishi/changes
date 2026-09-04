@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { RepositoryRow } from "../worker/domain";
+import { isSummaryGenerationDue } from "../worker/records";
 import { initialSince } from "../worker/sync";
+import { periodBoundsForInstant } from "../worker/lib/time";
 
 function repository(lastSyncedAt: string | null): RepositoryRow {
   return {
@@ -32,5 +34,52 @@ describe("repository sync cutoff", () => {
     expect(initialSince(repository("2026-08-26T00:00:00.000Z"))).toBe(
       "2026-08-24T00:00:00.000Z",
     );
+  });
+});
+
+describe("summary generation cadence", () => {
+  const now = "2026-08-20T01:00:00.000Z";
+
+  it("always refreshes daily and completed periods", () => {
+    expect(
+      isSummaryGenerationDue(
+        periodBoundsForInstant("daily", now),
+        "2026-08-20T00:30:00.000Z",
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      isSummaryGenerationDue(
+        periodBoundsForInstant("weekly", "2026-08-10T01:00:00.000Z"),
+        now,
+        now,
+      ),
+    ).toBe(true);
+  });
+
+  it("refreshes the current week at most once per Tokyo day", () => {
+    const bounds = periodBoundsForInstant("weekly", now);
+    expect(
+      isSummaryGenerationDue(bounds, "2026-08-19T23:00:00.000Z", now),
+    ).toBe(false);
+    expect(
+      isSummaryGenerationDue(bounds, "2026-08-19T14:00:00.000Z", now),
+    ).toBe(true);
+  });
+
+  it("refreshes the current month at most once per Tokyo week", () => {
+    const bounds = periodBoundsForInstant("monthly", now);
+    expect(
+      isSummaryGenerationDue(bounds, "2026-08-16T01:00:00.000Z", now),
+    ).toBe(false);
+    expect(
+      isSummaryGenerationDue(bounds, "2026-08-15T14:00:00.000Z", now),
+    ).toBe(true);
+  });
+
+  it("allows the first summary for every period immediately", () => {
+    expect(
+      isSummaryGenerationDue(periodBoundsForInstant("monthly", now), null, now),
+    ).toBe(true);
   });
 });
