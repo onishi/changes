@@ -125,7 +125,6 @@ export async function listRepositories(
 
 function changeRecordFromRow(
   record: RecordWithRepository,
-  githubOwner: string,
   commits: CommitRow[] = [],
 ): ChangeRecord {
   const bounds = periodBoundsForRoute(record.period_type, record.period_key);
@@ -150,7 +149,6 @@ function changeRecordFromRow(
     },
     commitLogUrl: createCommitLogUrl(
       { html_url: record.repository_url },
-      githubOwner,
       bounds,
     ),
     commits,
@@ -218,9 +216,7 @@ export async function getLatestDailyRecords(options: {
     .all<RecordWithRepository>();
 
   return {
-    records: result.results.map((record) =>
-      changeRecordFromRow(record, options.env.GITHUB_OWNER),
-    ),
+    records: result.results.map((record) => changeRecordFromRow(record)),
   };
 }
 
@@ -421,11 +417,7 @@ export async function getPeriodRecords(options: {
       completedAt: latestRun?.completed_at ?? null,
     },
     records: records.map((record) =>
-      changeRecordFromRow(
-        record,
-        options.env.GITHUB_OWNER,
-        commitsByRecord.get(record.id) ?? [],
-      ),
+      changeRecordFromRow(record, commitsByRecord.get(record.id) ?? []),
     ),
     nextCursor,
   };

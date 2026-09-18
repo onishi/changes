@@ -23,7 +23,9 @@ export async function checkHealth(env: Env): Promise<Response> {
   let webStatus: "ok" | "critical" = "ok";
   let webMessage = "D1への疎通に成功";
   try {
-    const row = await env.DB.prepare("SELECT COUNT(*) AS count FROM repositories").first<{
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM repositories",
+    ).first<{
       count: number;
     }>();
     if (!row) throw new Error("クエリ結果が空です");
@@ -67,7 +69,11 @@ export async function checkHealth(env: Env): Promise<Response> {
   }
 
   const statuses = [webStatus, batchStatus];
-  const overall = statuses.includes("critical") ? "critical" : statuses.includes("warning") ? "warning" : "ok";
+  const overall = statuses.includes("critical")
+    ? "critical"
+    : statuses.includes("warning")
+      ? "warning"
+      : "ok";
 
   const body = {
     protocol_version: "1.0",
