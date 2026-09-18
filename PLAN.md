@@ -155,7 +155,7 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 - 3つの期間粒度 × 2つの公開範囲 × 2つのビューを API で取得できる
 - 同一期間・同一リポジトリの複数コミットが1変更レコードにまとまる
 - ページを送っても変更レコードの欠落・重複・順序の揺れがない
-- 各変更レコードが正しい `author`、`since`、`until` を持つ GitHub コミットログ URL を返す
+- 各変更レコードが正しい `since`、`until` を持つ GitHub コミットログ URL を返す
 - public query が DB レベルで private row を除外している
 - public API が private リポジトリのコミットログ URL を返さない
 
@@ -300,15 +300,15 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 
 ## 主なリスクと対策
 
-| リスク                                          | 対策                                                                                               |
-| ----------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| private 情報が public に混ざる                  | data-access 層、要約、cache namespace を scope ごとに分離し、canary private fixture で自動検査する |
-| GitHub API rate limit                           | 差分同期、ETag/conditional request、backoff、最終成功データの継続表示を行う                        |
-| force-push や visibility 変更でデータが古くなる | overlap を持つ定期再同期と、定期的な repository metadata 再検証を行う                              |
-| AI が事実と異なる内容を生成する                 | 入力限定、structured output、元コミットへの導線、fixture 評価を用意する                            |
-| AI コストが増える                               | fingerprint cache、非同期生成、chunk 上限、予算上限を設ける                                        |
-| 日付集計がずれる                                | UTC 保存、表示時の設定タイムゾーン変換、境界値テストを徹底する                                     |
-| commit author の判定を誤る                      | GitHub user ID を優先し、関連付け不能な commit の扱いを明示する                                    |
+| リスク                                          | 対策                                                                                                       |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| private 情報が public に混ざる                  | data-access 層、要約、cache namespace を scope ごとに分離し、canary private fixture で自動検査する         |
+| GitHub API rate limit                           | 差分同期、ETag/conditional request、backoff、最終成功データの継続表示を行う                                |
+| force-push や visibility 変更でデータが古くなる | overlap を持つ定期再同期と、定期的な repository metadata 再検証を行う                                      |
+| AI が事実と異なる内容を生成する                 | 入力限定、structured output、元コミットへの導線、fixture 評価を用意する                                    |
+| AI コストが増える                               | fingerprint cache、非同期生成、chunk 上限、予算上限を設ける                                                |
+| 日付集計がずれる                                | UTC 保存、表示時の設定タイムゾーン変換、境界値テストを徹底する                                             |
+| owner の活動を取りこぼす                        | commit author の GitHub アカウント紐付けでは絞り込まず、owner 配下リポジトリの default branch を範囲とする |
 
 ## リリース判定チェックリスト
 
@@ -317,7 +317,7 @@ preview と production の Worker、D1、Queue、Secrets は分離します。AI
 - [ ] allowlist 外の GitHub ユーザーが all にアクセスできない
 - [ ] 3つの期間粒度と2つのビューが直接 URL から開ける
 - [ ] 同一期間・同一リポジトリの複数コミットが1変更レコードにまとまる
-- [ ] daily / weekly / monthly の GitHub コミットログリンクに正しい `author`、`since`、`until` が付く
+- [ ] daily / weekly / monthly の GitHub コミットログリンクに正しい `since`、`until` が付く
 - [ ] 前後期間と50件超の変更レコード pagination が正しく動く
 - [ ] 同期の再実行、途中失敗、rate limit から回復できる
 - [ ] AI 停止中でも changelog を閲覧できる

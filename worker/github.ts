@@ -241,6 +241,31 @@ export async function listInstalledRepositories(
   return repositories;
 }
 
+/**
+ * The request carries no `author` filter. GitHub resolves that filter against
+ * the account a commit is linked to, so it dropped every commit whose author
+ * identity is not the owner's account - including the ones an agent authors on
+ * the owner's behalf (author `claude`) and any commit made from an email the
+ * owner has not registered on GitHub. Those commits still landed on the default
+ * branch of the owner's own repository, which is what this changelog records.
+ * The installation only covers repositories under the owner, so the branch
+ * itself is the scope.
+ */
+export function repositoryCommitsPath(
+  owner: string,
+  repository: { name: string; defaultBranch: string },
+  since: string,
+  page: number,
+): string {
+  const query = new URLSearchParams({
+    sha: repository.defaultBranch,
+    since,
+    per_page: "100",
+    page: String(page),
+  });
+  return `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository.name)}/commits?${query.toString()}`;
+}
+
 export async function listRepositoryCommitsPage(
   env: Env,
   repository: { name: string; defaultBranch: string },
@@ -248,15 +273,8 @@ export async function listRepositoryCommitsPage(
   page: number,
 ): Promise<{ commits: GitHubCommit[]; hasNextPage: boolean }> {
   const token = await getInstallationToken(env);
-  const query = new URLSearchParams({
-    sha: repository.defaultBranch,
-    author: env.GITHUB_OWNER,
-    since,
-    per_page: "100",
-    page: String(page),
-  });
   const response = await githubRequest(
-    `/repos/${encodeURIComponent(env.GITHUB_OWNER)}/${encodeURIComponent(repository.name)}/commits?${query.toString()}`,
+    repositoryCommitsPath(env.GITHUB_OWNER, repository, since, page),
     token,
   );
   const parsed = commitListSchema.safeParse(await response.json());

@@ -16,7 +16,7 @@ GitHub のコミット履歴を、日次・週次・月次の changelog とし�
 
 - `public`: 誰でも閲覧可能。public リポジトリのコミットだけを表示する
 - `all`: GitHub 認証済みかつ許可されたユーザーだけが閲覧可能。public/private 両方を表示する
-- コミットの author email だけに依存せず、GitHub API が返すユーザーとの関連情報を使って所有者のコミットを判定する
+- owner 配下リポジトリの default branch に入ったコミットをすべて対象とし、commit author が誰に紐づくかでは絞り込まない。エージェントが owner に代わって作成したコミット（author が `claude` など）や、GitHub 未登録のメールアドレスで作成したコミットも owner の活動として扱う
 - owner はアプリ設定で1つだけ指定し、別 owner や Organization 配下のリポジトリは対象にしない
 
 複数ユーザーがそれぞれ自分の changelog を持つ SaaS 形式は、初期スコープには含めません。
@@ -82,13 +82,12 @@ public / all は表示範囲です。public では public リポジトリの変�
 
 ### GitHub コミットログへのリンク
 
-各変更レコードに「GitHub でコミットログを見る」リンクを表示します。リンク先は対象リポジトリの default branch のコミット履歴とし、owner と期間で絞り込みます。
+各変更レコードに「GitHub でコミットログを見る」リンクを表示します。リンク先は対象リポジトリの default branch のコミット履歴とし、期間で絞り込みます。同期側と同じ条件にするため author では絞り込みません。
 
 ```text
-https://github.com/:owner/:repo/commits?author=:owner&since=:since&until=:until
+https://github.com/:owner/:repo/commits?since=:since&until=:until
 ```
 
-- `author`: アプリに設定された単一 owner の GitHub login
 - `since`: 対象期間の開始日時
 - `until`: 対象期間の終了日時
 - `since` / `until`: `Asia/Tokyo` で求めた期間境界を UTC の ISO 8601 へ変換した値

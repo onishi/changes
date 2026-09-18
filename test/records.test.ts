@@ -237,7 +237,7 @@ describe("change record aggregation and public boundary", () => {
     expect(records[0]?.commits).toHaveLength(2);
 
     const commitLogUrl = new URL(records[0]?.commitLogUrl ?? "");
-    expect(commitLogUrl.searchParams.get("author")).toBe("onishi");
+    expect(commitLogUrl.searchParams.has("author")).toBe(false);
     expect(commitLogUrl.searchParams.get("since")).toBe(
       "2026-08-19T15:00:00.000Z",
     );
