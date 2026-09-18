@@ -1,6 +1,10 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import type { BootstrapData, PeriodResponse } from "../src/types";
+import type {
+  ActivityResponse,
+  BootstrapData,
+  PeriodResponse,
+} from "../src/types";
 import { app } from "../worker/app";
 import { serializeBootstrap } from "../worker/bootstrap";
 import { hmacSha256 } from "../worker/lib/crypto";
@@ -92,6 +96,57 @@ async function insertRepository(options: {
       options.githubUpdatedAt,
       options.githubUpdatedAt,
       options.githubUpdatedAt,
+    )
+    .run();
+}
+
+const tokyoDayFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Tokyo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+// The activity graph is anchored on today, so its fixtures are too: dates
+// hard-coded here would eventually fall out of the graph's window.
+function tokyoDayKey(daysAgo = 0): string {
+  return tokyoDayFormatter.format(
+    new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000),
+  );
+}
+
+async function insertDailyRecord(options: {
+  repositoryId: string;
+  periodKey: string;
+  commitCount: number;
+  scope?: "public" | "all";
+}): Promise<void> {
+  const scope = options.scope ?? "public";
+  const start = `${options.periodKey}T00:00:00+09:00`;
+  const startIso = new Date(start).toISOString();
+  const endIso = new Date(
+    new Date(start).getTime() + 24 * 60 * 60 * 1000,
+  ).toISOString();
+  await env.DB.prepare(
+    `INSERT INTO change_records (
+       id, scope, period_type, period_key, period_start, period_end,
+       repository_id, commit_count, first_committed_at, last_committed_at,
+       source_fingerprint, summary_status, created_at, updated_at
+     ) VALUES (?, ?, 'daily', ?, ?, ?, ?, ?, ?, ?, ?, 'ready', ?, ?)`,
+  )
+    .bind(
+      `${scope}:daily:${options.periodKey}:${options.repositoryId}`,
+      scope,
+      options.periodKey,
+      startIso,
+      endIso,
+      options.repositoryId,
+      options.commitCount,
+      startIso,
+      startIso,
+      `fingerprint-${scope}-${options.periodKey}-${options.repositoryId}`,
+      startIso,
+      startIso,
     )
     .run();
 }
@@ -330,6 +385,118 @@ describe("HTTP access boundaries", () => {
     });
   });
 
+  it("serves daily commit activity and embeds it in the overview shell", async () => {
+    await insertPublicRepository();
+    await insertRepository({
+      id: "repo_second",
+      name: "aurora",
+      githubUpdatedAt: "2026-08-25T00:00:00.000Z",
+    });
+    const today = tokyoDayKey();
+    const yesterday = tokyoDayKey(1);
+    await insertDailyRecord({
+      repositoryId: "repo_public",
+      periodKey: yesterday,
+      commitCount: 3,
+    });
+    await insertDailyRecord({
+      repositoryId: "repo_second",
+      periodKey: yesterday,
+      commitCount: 4,
+    });
+    await insertDailyRecord({
+      repositoryId: "repo_public",
+      periodKey: today,
+      commitCount: 1,
+    });
+
+    const apiResponse = await app.request(
+      "/api/public/activity",
+      {},
+      testEnv(),
+    );
+    expect(apiResponse.status).toBe(200);
+    expect(apiResponse.headers.get("Cache-Control")).toContain("public");
+    const activity: ActivityResponse = await apiResponse.json();
+    expect(activity.repository).toBeNull();
+    expect(activity.end).toBe(today);
+    // Only days that saw commits, with every repository in scope summed up.
+    expect(activity.days).toEqual([
+      { date: yesterday, commitCount: 7 },
+      { date: today, commitCount: 1 },
+    ]);
+    // The graph never reaches back past the day the data itself starts.
+    expect(activity.start >= "2026-04-26").toBe(true);
+
+    const response = await app.request("/", {}, testEnv());
+    const html = await response.text();
+    const bootstrap = extractBootstrap(html);
+    expect(bootstrap.activityData?.days).toHaveLength(2);
+    expect(html).toContain("activity-grid");
+    expect(html).toContain("7 commits on ");
+    expect(html).toContain("8 commits in the last ");
+  });
+
+  it("scopes commit activity to a repository and hides private commits", async () => {
+    await insertPublicRepository();
+    await insertRepository({
+      id: "repo_second",
+      name: "aurora",
+      githubUpdatedAt: "2026-08-25T00:00:00.000Z",
+    });
+    const today = tokyoDayKey();
+    await insertDailyRecord({
+      repositoryId: "repo_public",
+      periodKey: today,
+      commitCount: 3,
+    });
+    await insertDailyRecord({
+      repositoryId: "repo_second",
+      periodKey: today,
+      commitCount: 4,
+    });
+    await insertDailyRecord({
+      repositoryId: "repo_public",
+      periodKey: today,
+      commitCount: 9,
+      scope: "all",
+    });
+
+    const response = await app.request(
+      "/api/public/repositories/kinki-zoo/activity",
+      {},
+      testEnv(),
+    );
+    expect(response.status).toBe(200);
+    const activity: ActivityResponse = await response.json();
+    expect(activity.repository).toBe("kinki-zoo");
+    // The public scope must not pick up the all-scope record for the same day.
+    expect(activity.days).toEqual([{ date: today, commitCount: 3 }]);
+
+    const missing = await app.request(
+      "/api/public/repositories/missing/activity",
+      {},
+      testEnv(),
+    );
+    expect(missing.status).toBe(404);
+  });
+
+  it("requires authentication for the private activity API", async () => {
+    const response = await app.request("/api/all/activity", {}, testEnv());
+    expect(response.status).toBe(401);
+
+    const headers = await authenticatedHeaders();
+    const authenticated = await app.request(
+      "/api/all/activity",
+      { headers },
+      testEnv(),
+    );
+    expect(authenticated.status).toBe(200);
+    expect(authenticated.headers.get("Cache-Control")).toBe(
+      "private, no-store",
+    );
+  });
+
   it("embeds period data and canonicalizes old page routes", async () => {
     const response = await app.request("/daily/2026-08-20", {}, testEnv());
     const bootstrap = extractBootstrap(await response.text());
@@ -390,6 +557,7 @@ describe("HTTP access boundaries", () => {
       path: "</script>",
       periodData: null,
       latestDailyData: null,
+      activityData: null,
       repositoriesData: null,
       session: null,
       error: "line\u2028separator",

@@ -98,6 +98,19 @@ export interface LatestDailyResponse {
   records: ChangeRecord[];
 }
 
+export interface ActivityDay {
+  date: string;
+  commitCount: number;
+}
+
+export interface ActivityResponse {
+  scope: Scope;
+  repository: string | null;
+  start: string;
+  end: string;
+  days: ActivityDay[];
+}
+
 export interface RepositoriesResponse {
   repositories: Repository[];
 }
@@ -111,6 +124,7 @@ export interface BootstrapData {
   path: string;
   periodData: PeriodResponse | null;
   latestDailyData: LatestDailyResponse | null;
+  activityData: ActivityResponse | null;
   repositoriesData: RepositoriesResponse | null;
   session: SessionResponse | null;
   error: string | null;

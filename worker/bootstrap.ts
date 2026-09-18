@@ -1,5 +1,6 @@
 import type { SessionRow } from "./domain";
 import {
+  getDailyActivity,
   getLatestDailyRecords,
   getPeriodRecords,
   listRepositories,
@@ -25,6 +26,7 @@ function emptyBootstrap(request: Request): BootstrapData {
     path: requestPath(request),
     periodData: null,
     latestDailyData: null,
+    activityData: null,
     repositoriesData: null,
     session: null,
     error: null,
@@ -56,12 +58,23 @@ async function loadBootstrapData(
     }
 
     if (route.isOverview) {
-      bootstrap.latestDailyData = await getLatestDailyRecords({
-        env,
-        scope: route.scope,
-        repositoryName: route.repository ?? undefined,
-        days: 5,
-      });
+      // The feed and the activity graph are independent queries, so the
+      // overview only waits for the slower of the two.
+      const [latestDailyData, activityData] = await Promise.all([
+        getLatestDailyRecords({
+          env,
+          scope: route.scope,
+          repositoryName: route.repository ?? undefined,
+          days: 5,
+        }),
+        getDailyActivity({
+          env,
+          scope: route.scope,
+          repositoryName: route.repository ?? undefined,
+        }),
+      ]);
+      bootstrap.latestDailyData = latestDailyData;
+      bootstrap.activityData = activityData;
       return bootstrap;
     }
 

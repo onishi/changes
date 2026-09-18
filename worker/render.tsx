@@ -23,6 +23,7 @@ export function renderAppHtml(
       onRetry={noop}
       data={bootstrap.periodData}
       latestDailyData={bootstrap.latestDailyData}
+      activityData={bootstrap.activityData}
       repositoriesData={bootstrap.repositoriesData}
     />,
   );

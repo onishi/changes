@@ -417,10 +417,12 @@ GitHub コミットログ URL は永続化せず、owner、repository、period s
 ```text
 GET  /api/public/periods/:period/:date
 GET  /api/public/latest-daily
+GET  /api/public/activity
 GET  /api/public/repositories
 GET  /api/public/repositories/:repo/periods/:period/:date
 
 GET  /api/all/periods/:period/:date
+GET  /api/all/activity
 GET  /api/all/repositories
 GET  /api/all/repositories/:repo/periods/:period/:date
 
@@ -428,6 +430,8 @@ POST /api/internal/sync
 POST /api/internal/summaries/generate
 POST /api/webhooks/github
 ```
+
+`activity` はトップページの活動グラフ用に、直近1年（データ保持開始日まで）の日別コミット数を返します。コミットがあった日だけを返し、グラフの升目はクライアントが期間から組み立てます。
 
 `all` と internal API は認証または署名検証が必須です。API はリポジトリごとに集約された変更レコード配列と、次ページの cursor を返します。各変更レコードには AI 要約の状態、元コミット配列、期間指定済みの GitHub コミットログ URL を含めます。
 

@@ -17,7 +17,9 @@ import {
   shiftPeriodKey,
 } from "./lib/time";
 import { createCommitLogUrl } from "./records";
+import { activityRange } from "../shared/activity";
 import type {
+  ActivityResponse,
   ChangeRecord,
   CommitsResponse,
   LatestDailyResponse,
@@ -217,6 +219,77 @@ export async function getLatestDailyRecords(options: {
 
   return {
     records: result.results.map((record) => changeRecordFromRow(record)),
+  };
+}
+
+export async function getDailyActivity(options: {
+  env: Env;
+  scope: Scope;
+  repositoryName?: string;
+  weeks?: number;
+  now?: Date;
+}): Promise<ActivityResponse> {
+  const todayKey = currentPeriodKey("daily", options.now);
+  const range = activityRange(todayKey, options.weeks);
+  const start = periodBoundsForRoute("daily", range.startKey).start;
+  const endExclusive = periodBoundsForRoute("daily", range.endKey).endExclusive;
+  const repository = options.repositoryName
+    ? await findRepository(
+        options.env.DB,
+        options.scope,
+        options.env.GITHUB_OWNER,
+        options.repositoryName,
+      )
+    : null;
+  if (options.repositoryName && !repository) {
+    throw new Error("Repository not found.");
+  }
+
+  const conditions = [
+    "cr.scope = ?",
+    "cr.period_type = 'daily'",
+    "cr.period_start >= ?",
+    "cr.period_start < ?",
+    "cr.period_start >= ?",
+    "r.deleted_at IS NULL",
+  ];
+  const bindings: string[] = [
+    options.scope,
+    start,
+    endExclusive,
+    DATA_CUTOFF_INSTANT,
+  ];
+  if (options.scope === "public") {
+    conditions.push("r.visibility = 'public'");
+  }
+  if (repository) {
+    conditions.push("cr.repository_id = ?");
+    bindings.push(repository.id);
+  }
+
+  // One row per day across every repository in scope: the daily change
+  // records already hold the per-repository counts the graph sums up.
+  const result = await options.env.DB.prepare(
+    `SELECT cr.period_key AS date, SUM(cr.commit_count) AS commit_count
+       FROM change_records cr
+       JOIN repositories r ON r.id = cr.repository_id
+      WHERE ${conditions.join(" AND ")}
+      GROUP BY cr.period_key
+      HAVING SUM(cr.commit_count) > 0
+      ORDER BY cr.period_key ASC`,
+  )
+    .bind(...bindings)
+    .all<{ date: string; commit_count: number }>();
+
+  return {
+    scope: options.scope,
+    repository: repository ? repository.name : null,
+    start: range.startKey,
+    end: range.endKey,
+    days: result.results.map((row) => ({
+      date: row.date,
+      commitCount: row.commit_count,
+    })),
   };
 }
 

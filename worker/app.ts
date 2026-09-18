@@ -7,6 +7,7 @@ import {
   logout,
 } from "./auth";
 import {
+  getDailyActivity,
   getLatestDailyRecords,
   getPeriodRecords,
   getRecordCommits,
@@ -152,6 +153,28 @@ async function latestDailyResponse(
   }
 }
 
+async function activityResponse(
+  context: Context<AppBindings>,
+  scope: Scope,
+  repositoryName?: string,
+) {
+  try {
+    context.header(
+      "Cache-Control",
+      scope === "public"
+        ? "public, max-age=60, s-maxage=300"
+        : "private, no-store",
+    );
+    return context.json(
+      await getDailyActivity({ env: context.env, scope, repositoryName }),
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Invalid request";
+    const status = message === "Repository not found." ? 404 : 400;
+    return context.json({ error: message }, status);
+  }
+}
+
 app.get("/api/public/repositories", async (context) => {
   context.header("Cache-Control", "public, max-age=60, s-maxage=300");
   return context.json({
@@ -169,6 +192,16 @@ app.get("/api/all/latest-daily", (context) =>
 );
 app.get("/api/all/repositories/:repo/latest-daily", (context) =>
   latestDailyResponse(context, "all", context.req.param("repo")),
+);
+app.get("/api/public/activity", (context) =>
+  activityResponse(context, "public"),
+);
+app.get("/api/public/repositories/:repo/activity", (context) =>
+  activityResponse(context, "public", context.req.param("repo")),
+);
+app.get("/api/all/activity", (context) => activityResponse(context, "all"));
+app.get("/api/all/repositories/:repo/activity", (context) =>
+  activityResponse(context, "all", context.req.param("repo")),
 );
 app.get("/api/all/repositories", async (context) =>
   context.json({ repositories: await listRepositories(context.env.DB, "all") }),

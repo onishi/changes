@@ -17,7 +17,13 @@ import {
 } from "./routes";
 import { horizontalSwipeDirection, isNavigableLinkClick } from "./navigation";
 import { dataCutoffPeriodKey } from "../shared/data-cutoff";
+import {
+  ACTIVITY_LEVELS,
+  activityMonthStarts,
+  buildActivityGrid,
+} from "../shared/activity";
 import type {
+  ActivityResponse,
   BootstrapData,
   ChangeRecord,
   CommitsResponse,
@@ -71,6 +77,24 @@ const shortDateFormatter = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
 });
 
+const monthFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Asia/Tokyo",
+  month: "short",
+});
+
+const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// The same three rows GitHub labels: enough to read the grid without
+// crowding every row with text.
+const labelledWeekdays = new Set([1, 3, 5]);
+
+function tokyoDate(dayKey: string): Date {
+  return new Date(`${dayKey}T00:00:00+09:00`);
+}
+
+function commitCountLabel(commitCount: number): string {
+  return `${String(commitCount)} commit${commitCount === 1 ? "" : "s"}`;
+}
+
 async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, {
     headers: { Accept: "application/json" },
@@ -101,6 +125,13 @@ function latestDailyApiPath(route: RouteState): string {
     ? `/repositories/${encodeURIComponent(route.repository)}`
     : "";
   return `/api/${route.scope}${repository}/latest-daily`;
+}
+
+function activityApiPath(route: RouteState): string {
+  const repository = route.repository
+    ? `/repositories/${encodeURIComponent(route.repository)}`
+    : "";
+  return `/api/${route.scope}${repository}/activity`;
 }
 
 function repositoriesApiPath(route: RouteState): string {
@@ -171,6 +202,137 @@ function SyncNote({ data }: { data: PeriodResponse }) {
             ? `Last synced ${timeFormatter.format(new Date(data.sync.lastSyncedAt))}`
             : "Waiting for the first GitHub sync"}
     </p>
+  );
+}
+
+function ActivityGraph({
+  data,
+  route,
+}: {
+  data: ActivityResponse;
+  route: RouteState;
+}) {
+  const grid = useMemo(
+    () =>
+      buildActivityGrid(
+        { startKey: data.start, endKey: data.end },
+        new Map(data.days.map((day) => [day.date, day.commitCount])),
+      ),
+    [data],
+  );
+  const monthStarts = useMemo(() => activityMonthStarts(grid.weeks), [grid]);
+  const scroller = useRef<HTMLDivElement>(null);
+
+  // Narrow screens cannot show a whole year at once, so open on the most
+  // recent weeks rather than on the oldest ones.
+  useEffect(() => {
+    const element = scroller.current;
+    if (element) element.scrollLeft = element.scrollWidth;
+  }, [grid]);
+
+  return (
+    <section className="activity" aria-labelledby="activity-title">
+      <div className="activity-header">
+        <h2 id="activity-title">
+          {`${commitCountLabel(grid.totalCommits)} in the last ${String(grid.dayCount)} days`}
+        </h2>
+        <p className="activity-legend">
+          <span>Less</span>
+          {Array.from({ length: ACTIVITY_LEVELS + 1 }, (_unused, level) => (
+            <span
+              key={level}
+              aria-hidden="true"
+              className={`activity-day activity-level-${String(level)}`}
+            />
+          ))}
+          <span>More</span>
+        </p>
+      </div>
+
+      <div className="activity-scroll" ref={scroller}>
+        <table className="activity-grid">
+          <caption className="visually-hidden">
+            {`Commits per day from ${headingDateFormatter.format(
+              tokyoDate(data.start),
+            )} to ${headingDateFormatter.format(tokyoDate(data.end))}`}
+          </caption>
+          <thead>
+            <tr>
+              <td />
+              {grid.weeks.map((week, index) => {
+                const monthStart = monthStarts[index];
+                return (
+                  <th key={week.startDate} scope="col">
+                    {monthStart
+                      ? monthFormatter.format(tokyoDate(monthStart))
+                      : ""}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {weekdayLabels.map((label, weekday) => (
+              <tr key={label}>
+                <th scope="row">
+                  <span
+                    className={
+                      labelledWeekdays.has(weekday)
+                        ? undefined
+                        : "visually-hidden"
+                    }
+                  >
+                    {label}
+                  </span>
+                </th>
+                {grid.weeks.map((week) => {
+                  const day = week.days[weekday];
+                  if (!day?.date) {
+                    return (
+                      <td
+                        key={`${week.startDate}-${String(weekday)}`}
+                        className="activity-cell"
+                      />
+                    );
+                  }
+                  const dayLabel = `${
+                    day.commitCount === 0
+                      ? "No commits"
+                      : commitCountLabel(day.commitCount)
+                  } on ${headingDateFormatter.format(tokyoDate(day.date))}`;
+                  const className = `activity-day activity-level-${String(day.level)}`;
+                  return (
+                    <td key={day.date} className="activity-cell">
+                      {day.commitCount > 0 ? (
+                        <a
+                          className={className}
+                          href={buildPath(route, {
+                            period: "daily",
+                            key: day.date,
+                            repository: route.repository,
+                            cursor: null,
+                          })}
+                          title={dayLabel}
+                          aria-label={dayLabel}
+                        />
+                      ) : (
+                        // Quiet days carry a tooltip only: reading out every
+                        // empty square would drown the days that do have work.
+                        <span
+                          aria-hidden="true"
+                          className={className}
+                          title={dayLabel}
+                        />
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
@@ -621,6 +783,7 @@ export interface AppViewProps {
   onRetry: () => void;
   data: PeriodResponse | null;
   latestDailyData: LatestDailyResponse | null;
+  activityData: ActivityResponse | null;
   repositoriesData: RepositoriesResponse | null;
 }
 
@@ -639,6 +802,7 @@ export function AppView({
   onRetry,
   data,
   latestDailyData,
+  activityData,
   repositoriesData,
 }: AppViewProps) {
   return (
@@ -669,7 +833,12 @@ export function AppView({
           )
         ) : route.isOverview ? (
           latestDailyData ? (
-            <LatestDaily data={latestDailyData} route={route} />
+            <>
+              {activityData && (
+                <ActivityGraph data={activityData} route={route} />
+              )}
+              <LatestDaily data={latestDailyData} route={route} />
+            </>
           ) : (
             <Loading />
           )
@@ -798,6 +967,9 @@ export function App() {
   );
   const [latestDailyData, setLatestDailyData] =
     useState<LatestDailyResponse | null>(bootstrap?.latestDailyData ?? null);
+  const [activityData, setActivityData] = useState<ActivityResponse | null>(
+    bootstrap?.activityData ?? null,
+  );
   const [repositoriesData, setRepositoriesData] =
     useState<RepositoriesResponse | null>(bootstrap?.repositoriesData ?? null);
   const [session, setSession] = useState<SessionResponse | null>(
@@ -811,6 +983,7 @@ export function App() {
       setError(null);
       setData(null);
       setLatestDailyData(null);
+      setActivityData(null);
       setRepositoriesData(null);
       try {
         if (route.isRepositoryIndex) {
@@ -824,12 +997,12 @@ export function App() {
         }
 
         if (route.isOverview) {
-          setLatestDailyData(
-            await fetchJson<LatestDailyResponse>(
-              latestDailyApiPath(route),
-              signal,
-            ),
-          );
+          const [latestDaily, activity] = await Promise.all([
+            fetchJson<LatestDailyResponse>(latestDailyApiPath(route), signal),
+            fetchJson<ActivityResponse>(activityApiPath(route), signal),
+          ]);
+          setLatestDailyData(latestDaily);
+          setActivityData(activity);
           return;
         }
 
@@ -1027,6 +1200,7 @@ export function App() {
       onRetry={() => void load()}
       data={data}
       latestDailyData={latestDailyData}
+      activityData={activityData}
       repositoriesData={repositoriesData}
     />
   );
