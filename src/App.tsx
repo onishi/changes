@@ -13,6 +13,7 @@ import {
   isFuturePeriod,
   keyboardShortcutPath,
   parseRoute,
+  periodNavigationPath,
   periodKeyForDate,
 } from "./routes";
 import { horizontalSwipeDirection, isNavigableLinkClick } from "./navigation";
@@ -434,12 +435,14 @@ function Header({
   syncing,
   onSync,
   navigate,
+  latestDailyKey,
 }: {
   route: RouteState;
   session: SessionResponse | null;
   syncing: boolean;
   onSync: () => void;
   navigate: (path: string) => void;
+  latestDailyKey?: string;
 }) {
   const onDateChange = (value: string) => {
     navigate(
@@ -509,7 +512,7 @@ function Header({
           {(Object.keys(periodLabels) as PeriodType[]).map((period) => (
             <a
               key={period}
-              href={buildPath(route, { period, cursor: null })}
+              href={periodNavigationPath(route, period, latestDailyKey)}
               aria-current={
                 !route.isOverview && route.period === period
                   ? "page"
@@ -649,6 +652,7 @@ export function AppView({
         syncing={syncing}
         onSync={onSync}
         navigate={navigate}
+        latestDailyKey={latestDailyData?.records[0]?.periodKey}
       />
 
       <main>

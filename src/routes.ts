@@ -85,6 +85,18 @@ export function buildPath(
   return cursor ? `${path}?cursor=${encodeURIComponent(cursor)}` : path;
 }
 
+export function periodNavigationPath(
+  route: RouteState,
+  period: PeriodType,
+  latestDailyKey?: string,
+): string {
+  return buildPath(route, {
+    period,
+    key: route.isOverview && period === "daily" ? latestDailyKey : undefined,
+    cursor: null,
+  });
+}
+
 export function isOverviewPath(pathname: string): boolean {
   const parts = pathname.split("/").filter(Boolean);
   if (parts[0] === "public" || parts[0] === "all") parts.shift();
