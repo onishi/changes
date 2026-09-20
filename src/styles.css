@@ -333,6 +333,7 @@ main {
   padding: 4px 0 30px;
   --activity-size: 13px;
   --activity-gap: 3px;
+  --activity-label: 30px;
 }
 
 .activity-header {
@@ -377,13 +378,28 @@ main {
 }
 
 .activity-grid thead th {
+  position: relative;
+  width: var(--activity-size);
   height: 14px;
   text-align: left;
   vertical-align: bottom;
 }
 
+/* Month labels are taken out of flow so a wider one cannot stretch its
+   column: every week keeps the same width and the squares stay evenly
+   spaced, with the label spilling into the header space beside it. */
+.activity-grid thead th span {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+}
+
+.activity-corner,
 .activity-grid tbody th {
-  width: 30px;
+  width: var(--activity-label);
+}
+
+.activity-grid tbody th {
   padding-right: 4px;
   text-align: right;
   vertical-align: middle;
@@ -1096,10 +1112,7 @@ footer a {
   .activity {
     --activity-size: 11px;
     --activity-gap: 2px;
-  }
-
-  .activity-grid tbody th {
-    width: 26px;
+    --activity-label: 26px;
   }
 
   .controls {

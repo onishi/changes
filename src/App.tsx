@@ -258,14 +258,16 @@ function ActivityGraph({
           </caption>
           <thead>
             <tr>
-              <td />
+              <td className="activity-corner" />
               {grid.weeks.map((week, index) => {
                 const monthStart = monthStarts[index];
                 return (
                   <th key={week.startDate} scope="col">
-                    {monthStart
-                      ? monthFormatter.format(tokyoDate(monthStart))
-                      : ""}
+                    {monthStart && (
+                      <span>
+                        {monthFormatter.format(tokyoDate(monthStart))}
+                      </span>
+                    )}
                   </th>
                 );
               })}
