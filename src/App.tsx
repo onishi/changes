@@ -9,6 +9,7 @@ import {
 import {
   buildPath,
   currentPeriodKey,
+  isAppPath,
   isBeforeDataCutoffPeriod,
   isFuturePeriod,
   keyboardShortcutPath,
@@ -1194,14 +1195,9 @@ export function App() {
     const targetPath = `${url.pathname}${url.search}`;
     const currentPath = `${window.location.pathname}${window.location.search}`;
     if (url.hash && targetPath === currentPath) return;
-    if (
-      buildPath(parseRoute({ pathname: url.pathname, search: url.search })) !==
-      targetPath
-    ) {
-      return;
-    }
+    if (!isAppPath(url.pathname)) return;
     event.preventDefault();
-    navigate(targetPath);
+    navigate(buildPath(parseRoute({ pathname: url.pathname, search: url.search })));
   };
 
   return (

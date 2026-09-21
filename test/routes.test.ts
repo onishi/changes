@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildPath,
+  isAppPath,
   isOverviewPath,
   isRepositoryIndexPath,
   keyboardShortcutPath,
@@ -67,6 +68,17 @@ describe("frontend routes", () => {
     expect(isOverviewPath("/daily/2026-08-24")).toBe(false);
     expect(isOverviewPath("/public/daily/2026-08-24")).toBe(false);
     expect(isOverviewPath("/repo/kinki-zoo/daily/2026-08-24")).toBe(false);
+  });
+
+  it("distinguishes app routes from same-origin non-app paths", () => {
+    expect(isAppPath("/")).toBe(true);
+    expect(isAppPath("/all")).toBe(true);
+    expect(isAppPath("/daily/2026-08-24")).toBe(true);
+    expect(isAppPath("/repo/kinki-zoo")).toBe(true);
+    expect(isAppPath("/all/repo/kinki-zoo/weekly/2026-08-24")).toBe(true);
+    expect(isAppPath("/favicon.png")).toBe(false);
+    expect(isAppPath("/api/public/periods/daily/2026-08-24")).toBe(false);
+    expect(isAppPath("/not-an-app-route")).toBe(false);
   });
 
   it("keeps authenticated roots on overview pages", () => {
