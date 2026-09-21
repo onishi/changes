@@ -1,19 +1,37 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import {
   buildPath,
   currentPeriodKey,
   isBeforeDataCutoffPeriod,
   isFuturePeriod,
+  keyboardShortcutPath,
   parseRoute,
+  periodNavigationPath,
   periodKeyForDate,
 } from "./routes";
+import { horizontalSwipeDirection, isNavigableLinkClick } from "./navigation";
 import { dataCutoffPeriodKey } from "../shared/data-cutoff";
+import {
+  ACTIVITY_LEVELS,
+  activityMonthStarts,
+  buildActivityGrid,
+} from "../shared/activity";
 import type {
+  ActivityResponse,
   BootstrapData,
   ChangeRecord,
+  CommitsResponse,
   LatestDailyResponse,
   PeriodResponse,
   PeriodType,
+  RepositoriesResponse,
   RouteState,
   SessionResponse,
 } from "./types";
@@ -54,6 +72,30 @@ const timeFormatter = new Intl.DateTimeFormat("en-US", {
   hour12: false,
 });
 
+const shortDateFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Asia/Tokyo",
+  month: "short",
+  day: "numeric",
+});
+
+const monthFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Asia/Tokyo",
+  month: "short",
+});
+
+const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// The same three rows GitHub labels: enough to read the grid without
+// crowding every row with text.
+const labelledWeekdays = new Set([1, 3, 5]);
+
+function tokyoDate(dayKey: string): Date {
+  return new Date(`${dayKey}T00:00:00+09:00`);
+}
+
+function commitCountLabel(commitCount: number): string {
+  return `${String(commitCount)} commit${commitCount === 1 ? "" : "s"}`;
+}
+
 async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, {
     headers: { Accept: "application/json" },
@@ -77,6 +119,38 @@ function apiPath(route: RouteState): string {
   return route.cursor
     ? `${path}?cursor=${encodeURIComponent(route.cursor)}`
     : path;
+}
+
+function latestDailyApiPath(route: RouteState): string {
+  const repository = route.repository
+    ? `/repositories/${encodeURIComponent(route.repository)}`
+    : "";
+  return `/api/${route.scope}${repository}/latest-daily`;
+}
+
+function activityApiPath(route: RouteState): string {
+  const repository = route.repository
+    ? `/repositories/${encodeURIComponent(route.repository)}`
+    : "";
+  return `/api/${route.scope}${repository}/activity`;
+}
+
+function repositoriesApiPath(route: RouteState): string {
+  return `/api/${route.scope}/repositories`;
+}
+
+function overviewPath(
+  scope: RouteState["scope"],
+  repository?: string | null,
+  isRepositoryIndex?: boolean,
+) {
+  const prefix = scope === "all" ? "/all" : "";
+  if (repository) return `${prefix}/repo/${encodeURIComponent(repository)}/`;
+  return isRepositoryIndex ? `${prefix}/repo/` : `${prefix}/`;
+}
+
+function recordCommitsApiPath(scope: RouteState["scope"], recordId: string) {
+  return `/api/${scope}/records/${encodeURIComponent(recordId)}/commits`;
 }
 
 function formatPeriod(data: PeriodResponse): string {
@@ -132,6 +206,139 @@ function SyncNote({ data }: { data: PeriodResponse }) {
   );
 }
 
+function ActivityGraph({
+  data,
+  route,
+}: {
+  data: ActivityResponse;
+  route: RouteState;
+}) {
+  const grid = useMemo(
+    () =>
+      buildActivityGrid(
+        { startKey: data.start, endKey: data.end },
+        new Map(data.days.map((day) => [day.date, day.commitCount])),
+      ),
+    [data],
+  );
+  const monthStarts = useMemo(() => activityMonthStarts(grid.weeks), [grid]);
+  const scroller = useRef<HTMLDivElement>(null);
+
+  // Narrow screens cannot show a whole year at once, so open on the most
+  // recent weeks rather than on the oldest ones.
+  useEffect(() => {
+    const element = scroller.current;
+    if (element) element.scrollLeft = element.scrollWidth;
+  }, [grid]);
+
+  return (
+    <section className="activity" aria-labelledby="activity-title">
+      <div className="activity-header">
+        <h2 id="activity-title">
+          {`${commitCountLabel(grid.totalCommits)} in the last ${String(grid.dayCount)} days`}
+        </h2>
+        <p className="activity-legend">
+          <span>Less</span>
+          {Array.from({ length: ACTIVITY_LEVELS + 1 }, (_unused, level) => (
+            <span
+              key={level}
+              aria-hidden="true"
+              className={`activity-day activity-level-${String(level)}`}
+            />
+          ))}
+          <span>More</span>
+        </p>
+      </div>
+
+      <div className="activity-scroll" ref={scroller}>
+        <table className="activity-grid">
+          <caption className="visually-hidden">
+            {`Commits per day from ${headingDateFormatter.format(
+              tokyoDate(data.start),
+            )} to ${headingDateFormatter.format(tokyoDate(data.end))}`}
+          </caption>
+          <thead>
+            <tr>
+              <td className="activity-corner" />
+              {grid.weeks.map((week, index) => {
+                const monthStart = monthStarts[index];
+                return (
+                  <th key={week.startDate} scope="col">
+                    {monthStart && (
+                      <span>
+                        {monthFormatter.format(tokyoDate(monthStart))}
+                      </span>
+                    )}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {weekdayLabels.map((label, weekday) => (
+              <tr key={label}>
+                <th scope="row">
+                  <span
+                    className={
+                      labelledWeekdays.has(weekday)
+                        ? undefined
+                        : "visually-hidden"
+                    }
+                  >
+                    {label}
+                  </span>
+                </th>
+                {grid.weeks.map((week) => {
+                  const day = week.days[weekday];
+                  if (!day?.date) {
+                    return (
+                      <td
+                        key={`${week.startDate}-${String(weekday)}`}
+                        className="activity-cell"
+                      />
+                    );
+                  }
+                  const dayLabel = `${
+                    day.commitCount === 0
+                      ? "No commits"
+                      : commitCountLabel(day.commitCount)
+                  } on ${headingDateFormatter.format(tokyoDate(day.date))}`;
+                  const className = `activity-day activity-level-${String(day.level)}`;
+                  return (
+                    <td key={day.date} className="activity-cell">
+                      {day.commitCount > 0 ? (
+                        <a
+                          className={className}
+                          href={buildPath(route, {
+                            period: "daily",
+                            key: day.date,
+                            repository: route.repository,
+                            cursor: null,
+                          })}
+                          title={dayLabel}
+                          aria-label={dayLabel}
+                        />
+                      ) : (
+                        // Quiet days carry a tooltip only: reading out every
+                        // empty square would drown the days that do have work.
+                        <span
+                          aria-hidden="true"
+                          className={className}
+                          title={dayLabel}
+                        />
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function LatestDaily({
   data,
   route,
@@ -140,45 +347,79 @@ function LatestDaily({
   route: RouteState;
 }) {
   const latestKey = data.records[0]?.periodKey ?? currentPeriodKey("daily");
+  const recordsByDay = Array.from(
+    data.records.reduce((groups, record) => {
+      const records = groups.get(record.periodKey) ?? [];
+      records.push(record);
+      groups.set(record.periodKey, records);
+      return groups;
+    }, new Map<string, ChangeRecord[]>()),
+  );
   return (
     <section className="daily-feed" aria-labelledby="daily-feed-title">
       <header className="daily-feed-header">
-        <div>
-          <p className="section-label">Daily</p>
-          <h1 id="daily-feed-title">Latest changes</h1>
-        </div>
-        <p>The five latest entries from repository daily logs</p>
+        <h1 id="daily-feed-title">{route.repository ?? "Recent changes"}</h1>
       </header>
 
       <div className="daily-feed-list">
         {data.records.length === 0 ? (
           <p className="daily-feed-empty">No changes yet.</p>
         ) : (
-          data.records.map((record) => (
-            <a
-              className="daily-feed-item"
-              href={buildPath(route, {
-                period: "daily",
-                key: record.periodKey,
-                repository: record.repository.name,
-                cursor: null,
-              })}
-              key={record.id}
+          recordsByDay.map(([periodKey, records]) => (
+            <section
+              className="daily-feed-day"
+              aria-labelledby={`daily-feed-day-${periodKey}`}
+              key={periodKey}
             >
-              <div className="daily-feed-meta">
-                <time dateTime={record.periodKey}>
-                  {dateFormatter.format(
-                    new Date(`${record.periodKey}T00:00:00+09:00`),
-                  )}
-                </time>
-                <span>{record.commitCount} commits</span>
-              </div>
-              <h2>{record.repository.name}</h2>
-              <p>{summaryPreview(record)}</p>
-              <span className="daily-feed-arrow" aria-hidden="true">
-                →
-              </span>
-            </a>
+              <h2 id={`daily-feed-day-${periodKey}`}>
+                <a
+                  href={buildPath(route, {
+                    period: "daily",
+                    key: periodKey,
+                    repository: route.repository,
+                    cursor: null,
+                  })}
+                >
+                  <time dateTime={periodKey}>
+                    {dateFormatter.format(
+                      new Date(`${periodKey}T00:00:00+09:00`),
+                    )}
+                  </time>
+                </a>
+              </h2>
+              {records.map((record) => {
+                const dailyPath = buildPath(route, {
+                  period: "daily",
+                  key: record.periodKey,
+                  repository: record.repository.name,
+                  cursor: null,
+                });
+                return (
+                  <article className="daily-feed-item" key={record.id}>
+                    <h3>
+                      <a
+                        href={overviewPath(route.scope, record.repository.name)}
+                      >
+                        {record.repository.name}
+                      </a>
+                    </h3>
+                    <p>
+                      <a href={dailyPath}>{summaryPreview(record)}</a>
+                    </p>
+                    <div className="daily-feed-meta">
+                      <span>{record.commitCount} commits</span>
+                    </div>
+                    <a
+                      className="daily-feed-arrow"
+                      href={dailyPath}
+                      aria-label={`View ${record.repository.name} changes for ${record.periodKey}`}
+                    >
+                      <span aria-hidden="true">→</span>
+                    </a>
+                  </article>
+                );
+              })}
+            </section>
           ))
         )}
       </div>
@@ -188,13 +429,68 @@ function LatestDaily({
         href={buildPath(route, {
           period: "daily",
           key: latestKey,
-          repository: null,
+          repository: route.repository,
           cursor: null,
         })}
       >
         View Daily changelog
         <span aria-hidden="true"> →</span>
       </a>
+    </section>
+  );
+}
+
+function RepositoryIndex({
+  data,
+  route,
+}: {
+  data: RepositoriesResponse;
+  route: RouteState;
+}) {
+  return (
+    <section className="repo-index" aria-labelledby="repo-index-title">
+      <header className="repo-index-header">
+        <h1 id="repo-index-title">Repositories</h1>
+      </header>
+
+      <div className="repo-index-list">
+        {data.repositories.length === 0 ? (
+          <p className="repo-index-empty">No repositories yet.</p>
+        ) : (
+          data.repositories.map((repository) => (
+            <a
+              className="repo-index-item"
+              key={repository.id}
+              href={overviewPath(route.scope, repository.name)}
+            >
+              <span className="repo-index-name">{repository.name}</span>
+              <span className="repo-index-meta">
+                <span>
+                  Created{" "}
+                  <time dateTime={repository.created_at}>
+                    {shortDateFormatter.format(new Date(repository.created_at))}
+                  </time>
+                </span>
+                {repository.github_updated_at && (
+                  <span>
+                    Updated{" "}
+                    <time dateTime={repository.github_updated_at}>
+                      {shortDateFormatter.format(
+                        new Date(repository.github_updated_at),
+                      )}
+                    </time>
+                  </span>
+                )}
+              </span>
+              <span
+                className={`visibility visibility-${repository.visibility}`}
+              >
+                {repository.visibility}
+              </span>
+            </a>
+          ))
+        )}
+      </div>
     </section>
   );
 }
@@ -206,6 +502,30 @@ function ChangeCard({
   record: ChangeRecord;
   route: RouteState;
 }) {
+  const [commits, setCommits] = useState(record.commits);
+  const [commitsLoading, setCommitsLoading] = useState(false);
+  const [commitsLoaded, setCommitsLoaded] = useState(record.commits.length > 0);
+  const [commitsError, setCommitsError] = useState<string | null>(null);
+
+  const loadCommits = () => {
+    if (commitsLoaded || commitsLoading || record.commitCount === 0) return;
+    setCommitsLoading(true);
+    setCommitsError(null);
+    void fetchJson<CommitsResponse>(
+      recordCommitsApiPath(route.scope, record.id),
+    )
+      .then((response) => {
+        setCommits(response.commits);
+        setCommitsLoaded(true);
+      })
+      .catch((error: unknown) => {
+        setCommitsError(
+          error instanceof Error ? error.message : "Could not load commits.",
+        );
+      })
+      .finally(() => setCommitsLoading(false));
+  };
+
   return (
     <article className="change-card">
       <header className="card-header">
@@ -219,12 +539,7 @@ function ChangeCard({
             <span>{record.commitCount} commits</span>
           </div>
           <h2>
-            <a
-              href={buildPath(route, {
-                repository: record.repository.name,
-                cursor: null,
-              })}
-            >
+            <a href={overviewPath(route.scope, record.repository.name)}>
               {record.repository.name}
             </a>
           </h2>
@@ -241,7 +556,12 @@ function ChangeCard({
 
       <Summary record={record} />
 
-      <details className="commit-details">
+      <details
+        className="commit-details"
+        onToggle={(event) => {
+          if (event.currentTarget.open) loadCommits();
+        }}
+      >
         <summary>
           <span>Commit list</span>
           <span className="commit-range">
@@ -250,7 +570,9 @@ function ChangeCard({
           </span>
         </summary>
         <ol className="commit-list">
-          {record.commits.map((commit) => (
+          {commitsLoading && <li className="commit-state">Loading commits…</li>}
+          {commitsError && <li className="commit-state">{commitsError}</li>}
+          {commits.map((commit) => (
             <li key={commit.oid}>
               <a
                 href={commit.html_url}
@@ -276,21 +598,29 @@ function Header({
   session,
   syncing,
   onSync,
+  navigate,
+  latestDailyKey,
 }: {
   route: RouteState;
   session: SessionResponse | null;
   syncing: boolean;
   onSync: () => void;
+  navigate: (path: string) => void;
+  latestDailyKey?: string;
 }) {
   const onDateChange = (value: string) => {
-    window.location.href = buildPath(route, {
-      key: periodKeyForDate(route.period, value),
-      cursor: null,
-    });
+    navigate(
+      buildPath(route, {
+        key: periodKeyForDate(route.period, value),
+        cursor: null,
+      }),
+    );
   };
-  const allPath = buildPath(route, { scope: "all", cursor: null });
+  const allPath = route.isOverview
+    ? overviewPath("all", route.repository, route.isRepositoryIndex)
+    : buildPath(route, { scope: "all", cursor: null });
   const publicPath = route.isOverview
-    ? "/"
+    ? overviewPath("public", route.repository, route.isRepositoryIndex)
     : buildPath(route, { scope: "public", cursor: null });
 
   return (
@@ -346,12 +676,22 @@ function Header({
           {(Object.keys(periodLabels) as PeriodType[]).map((period) => (
             <a
               key={period}
-              href={buildPath(route, { period, cursor: null })}
-              aria-current={route.period === period ? "page" : undefined}
+              href={periodNavigationPath(route, period, latestDailyKey)}
+              aria-current={
+                !route.isOverview && route.period === period
+                  ? "page"
+                  : undefined
+              }
             >
               {periodLabels[period]}
             </a>
           ))}
+          <a
+            href={overviewPath(route.scope, null, true)}
+            aria-current={route.isRepositoryIndex ? "page" : undefined}
+          >
+            Repos
+          </a>
         </nav>
         {!route.isOverview && (
           <>
@@ -431,114 +771,54 @@ function Loading() {
   );
 }
 
-export function App() {
-  const route = useMemo(
-    () =>
-      parseRoute(window.location, (path) =>
-        window.history.replaceState(null, "", path),
-      ),
-    [],
-  );
-  const bootstrap = useMemo<BootstrapData | null>(() => {
-    const initial = window.__CHANGES_BOOTSTRAP__;
-    const path = `${window.location.pathname}${window.location.search}`;
-    return initial?.path === path ? initial : null;
-  }, []);
-  const hasCompleteBootstrap = route.isOverview
-    ? Boolean(bootstrap?.latestDailyData || bootstrap?.error)
-    : Boolean(bootstrap?.periodData || bootstrap?.error);
-  const [data, setData] = useState<PeriodResponse | null>(
-    bootstrap?.periodData ?? null,
-  );
-  const [latestDailyData, setLatestDailyData] =
-    useState<LatestDailyResponse | null>(bootstrap?.latestDailyData ?? null);
-  const [session, setSession] = useState<SessionResponse | null>(
-    bootstrap?.session ?? null,
-  );
-  const [error, setError] = useState<string | null>(bootstrap?.error ?? null);
-  const [syncing, setSyncing] = useState(false);
+function readRoute(): RouteState {
+  return parseRoute(window.location, (canonicalPath) => {
+    window.history.replaceState(null, "", canonicalPath);
+  });
+}
 
-  const load = useCallback(
-    async (signal?: AbortSignal) => {
-      setError(null);
-      try {
-        if (route.isOverview) {
-          setLatestDailyData(
-            await fetchJson<LatestDailyResponse>(
-              "/api/public/latest-daily",
-              signal,
-            ),
-          );
-          return;
-        }
+export interface AppViewProps {
+  route: RouteState;
+  session: SessionResponse | null;
+  syncing: boolean;
+  onSync: () => void;
+  navigate: (path: string) => void;
+  onLinkClick: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  error: string | null;
+  onRetry: () => void;
+  data: PeriodResponse | null;
+  latestDailyData: LatestDailyResponse | null;
+  activityData: ActivityResponse | null;
+  repositoriesData: RepositoriesResponse | null;
+}
 
-        const [periodData, sessionData] = await Promise.all([
-          fetchJson<PeriodResponse>(apiPath(route), signal),
-          route.scope === "all"
-            ? fetchJson<SessionResponse>("/api/auth/session", signal)
-            : Promise.resolve(null),
-        ]);
-        setData(periodData);
-        if (sessionData) setSession(sessionData);
-      } catch (caught) {
-        if (caught instanceof DOMException && caught.name === "AbortError")
-          return;
-        setError(
-          caught instanceof Error ? caught.message : "Could not load changes.",
-        );
-      }
-    },
-    [route],
-  );
-
-  useEffect(() => {
-    if (hasCompleteBootstrap) return;
-    const controller = new AbortController();
-    void load(controller.signal);
-    return () => controller.abort();
-  }, [hasCompleteBootstrap, load]);
-
-  useEffect(() => {
-    if (
-      route.repository &&
-      data?.repository &&
-      route.repository.toLowerCase() !==
-        data.repository.canonicalName.toLowerCase()
-    ) {
-      window.history.replaceState(
-        null,
-        "",
-        buildPath(route, {
-          repository: data.repository.canonicalName,
-          cursor: route.cursor,
-        }),
-      );
-    }
-  }, [data, route]);
-
-  const requestSync = () => {
-    setSyncing(true);
-    void fetch("/api/all/sync", { method: "POST" })
-      .then((response) => {
-        if (!response.ok) throw new Error("Could not request a sync.");
-      })
-      .catch((caught: unknown) => {
-        setError(
-          caught instanceof Error
-            ? caught.message
-            : "Could not request a sync.",
-        );
-      })
-      .finally(() => setSyncing(false));
-  };
-
+// Pure rendering of the app shell for a given state, shared by the client
+// (App, below) and the worker's SSR render (worker/render.tsx). Keeping
+// this free of window/document access is what makes it safe to render on
+// the server.
+export function AppView({
+  route,
+  session,
+  syncing,
+  onSync,
+  navigate,
+  onLinkClick,
+  error,
+  onRetry,
+  data,
+  latestDailyData,
+  activityData,
+  repositoriesData,
+}: AppViewProps) {
   return (
-    <div className="app-shell">
+    <div className="app-shell" onClick={onLinkClick}>
       <Header
         route={route}
         session={session}
         syncing={syncing}
-        onSync={requestSync}
+        onSync={onSync}
+        navigate={navigate}
+        latestDailyKey={latestDailyData?.records[0]?.periodKey}
       />
 
       <main>
@@ -547,13 +827,24 @@ export function App() {
             <p className="section-label">Could not load</p>
             <h1>Could not load changes</h1>
             <p>{error}</p>
-            <button type="button" onClick={() => void load()}>
+            <button type="button" onClick={onRetry}>
               Try again
             </button>
           </section>
+        ) : route.isRepositoryIndex ? (
+          repositoriesData ? (
+            <RepositoryIndex data={repositoriesData} route={route} />
+          ) : (
+            <Loading />
+          )
         ) : route.isOverview ? (
           latestDailyData ? (
-            <LatestDaily data={latestDailyData} route={route} />
+            <>
+              {activityData && (
+                <ActivityGraph data={activityData} route={route} />
+              )}
+              <LatestDaily data={latestDailyData} route={route} />
+            </>
           ) : (
             <Loading />
           )
@@ -567,7 +858,18 @@ export function App() {
                   {route.scope === "all"
                     ? "Public + private"
                     : "Public changelog"}
-                  {route.repository ? ` · ${route.repository}` : ""}
+                  {route.repository && (
+                    <>
+                      {" · "}
+                      {route.scope === "public" ? (
+                        <a href={overviewPath("public", route.repository)}>
+                          {route.repository}
+                        </a>
+                      ) : (
+                        route.repository
+                      )}
+                    </>
+                  )}
                 </p>
                 <h1>{formatPeriod(data)}</h1>
               </div>
@@ -621,8 +923,291 @@ export function App() {
 
       <footer>
         <span>changes.wagaya.org</span>
+        <span>
+          <a href="https://wagaya.org/">wagaya.org</a>
+        </span>
         <span>Times shown in Asia/Tokyo</span>
       </footer>
     </div>
+  );
+}
+
+export function App() {
+  const [route, setRoute] = useState<RouteState>(() => readRoute());
+  const initialRouteRef = useRef(route);
+
+  const navigate = useCallback(
+    (path: string, options?: { replace?: boolean }) => {
+      const current = `${window.location.pathname}${window.location.search}`;
+      if (path === current) return;
+      if (options?.replace) {
+        window.history.replaceState(null, "", path);
+      } else {
+        window.history.pushState(null, "", path);
+      }
+      setRoute(readRoute());
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const onPopState = () => setRoute(readRoute());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  const bootstrap = useMemo<BootstrapData | null>(() => {
+    const initial = window.__CHANGES_BOOTSTRAP__;
+    const path = `${window.location.pathname}${window.location.search}`;
+    return initial?.path === path ? initial : null;
+  }, []);
+  const hasCompleteBootstrap =
+    route === initialRouteRef.current &&
+    (route.isRepositoryIndex
+      ? Boolean(bootstrap?.repositoriesData || bootstrap?.error)
+      : route.isOverview
+        ? Boolean(bootstrap?.latestDailyData || bootstrap?.error)
+        : Boolean(bootstrap?.periodData || bootstrap?.error));
+  const [data, setData] = useState<PeriodResponse | null>(
+    bootstrap?.periodData ?? null,
+  );
+  const [latestDailyData, setLatestDailyData] =
+    useState<LatestDailyResponse | null>(bootstrap?.latestDailyData ?? null);
+  const [activityData, setActivityData] = useState<ActivityResponse | null>(
+    bootstrap?.activityData ?? null,
+  );
+  const [repositoriesData, setRepositoriesData] =
+    useState<RepositoriesResponse | null>(bootstrap?.repositoriesData ?? null);
+  const [session, setSession] = useState<SessionResponse | null>(
+    bootstrap?.session ?? null,
+  );
+  const [error, setError] = useState<string | null>(bootstrap?.error ?? null);
+  const [syncing, setSyncing] = useState(false);
+
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      setError(null);
+      setData(null);
+      setLatestDailyData(null);
+      setActivityData(null);
+      setRepositoriesData(null);
+      try {
+        if (route.isRepositoryIndex) {
+          setRepositoriesData(
+            await fetchJson<RepositoriesResponse>(
+              repositoriesApiPath(route),
+              signal,
+            ),
+          );
+          return;
+        }
+
+        if (route.isOverview) {
+          const [latestDaily, activity] = await Promise.all([
+            fetchJson<LatestDailyResponse>(latestDailyApiPath(route), signal),
+            fetchJson<ActivityResponse>(activityApiPath(route), signal),
+          ]);
+          setLatestDailyData(latestDaily);
+          setActivityData(activity);
+          return;
+        }
+
+        const [periodData, sessionData] = await Promise.all([
+          fetchJson<PeriodResponse>(apiPath(route), signal),
+          route.scope === "all"
+            ? fetchJson<SessionResponse>("/api/auth/session", signal)
+            : Promise.resolve(null),
+        ]);
+        setData(periodData);
+        if (sessionData) setSession(sessionData);
+      } catch (caught) {
+        if (caught instanceof DOMException && caught.name === "AbortError")
+          return;
+        setError(
+          caught instanceof Error ? caught.message : "Could not load changes.",
+        );
+      }
+    },
+    [route],
+  );
+
+  useEffect(() => {
+    if (hasCompleteBootstrap) return;
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [hasCompleteBootstrap, load]);
+
+  useEffect(() => {
+    if (
+      route.repository &&
+      data?.repository &&
+      route.repository.toLowerCase() !==
+        data.repository.canonicalName.toLowerCase()
+    ) {
+      window.history.replaceState(
+        null,
+        "",
+        buildPath(route, {
+          repository: data.repository.canonicalName,
+          cursor: route.cursor,
+        }),
+      );
+    }
+  }, [data, route]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
+        return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("input, textarea, select, [contenteditable='true']")
+      ) {
+        return;
+      }
+      const path = keyboardShortcutPath(
+        route,
+        event.key,
+        data
+          ? {
+              previousKey: data.period.previousKey,
+              nextKey: data.period.nextKey,
+            }
+          : undefined,
+      );
+      if (!path) return;
+      event.preventDefault();
+      navigate(path);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [data, route, navigate]);
+
+  useEffect(() => {
+    if (!data || route.isOverview || route.isRepositoryIndex) return;
+
+    let start: { x: number; y: number } | null = null;
+    const media = window.matchMedia("(max-width: 820px) and (pointer: coarse)");
+
+    const onTouchStart = (event: TouchEvent) => {
+      start = null;
+      if (!media.matches || event.touches.length !== 1) return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest(
+          "input, textarea, select, button, [contenteditable='true']",
+        )
+      ) {
+        return;
+      }
+
+      const touch = event.touches[0];
+      if (!touch) return;
+      // Leave the screen edges to browser back/forward gestures.
+      if (touch.clientX <= 24 || touch.clientX >= window.innerWidth - 24)
+        return;
+      start = { x: touch.clientX, y: touch.clientY };
+    };
+
+    const onTouchEnd = (event: TouchEvent) => {
+      const origin = start;
+      start = null;
+      if (!origin || event.changedTouches.length !== 1) return;
+      const touch = event.changedTouches[0];
+      if (!touch) return;
+      const direction = horizontalSwipeDirection({
+        startX: origin.x,
+        startY: origin.y,
+        endX: touch.clientX,
+        endY: touch.clientY,
+        viewportWidth: window.innerWidth,
+      });
+      if (!direction) return;
+
+      if (direction === "previous") {
+        if (isBeforeDataCutoffPeriod(route.period, data.period.previousKey)) {
+          return;
+        }
+        navigate(
+          buildPath(route, { key: data.period.previousKey, cursor: null }),
+        );
+        return;
+      }
+      if (isFuturePeriod(route.period, data.period.key)) return;
+      navigate(buildPath(route, { key: data.period.nextKey, cursor: null }));
+    };
+
+    const onTouchCancel = () => {
+      start = null;
+    };
+
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
+    window.addEventListener("touchcancel", onTouchCancel, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchend", onTouchEnd);
+      window.removeEventListener("touchcancel", onTouchCancel);
+    };
+  }, [data, route, navigate]);
+
+  const requestSync = () => {
+    setSyncing(true);
+    void fetch("/api/all/sync", { method: "POST" })
+      .then((response) => {
+        if (!response.ok) throw new Error("Could not request a sync.");
+      })
+      .catch((caught: unknown) => {
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Could not request a sync.",
+        );
+      })
+      .finally(() => setSyncing(false));
+  };
+
+  const handleLinkClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const anchor = target.closest("a");
+    if (!anchor) return;
+    const hrefAttr = anchor.getAttribute("href");
+    const url = hrefAttr ? new URL(anchor.href) : null;
+    const navigable = isNavigableLinkClick({
+      button: event.button,
+      defaultPrevented: event.defaultPrevented,
+      metaKey: event.metaKey,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
+      href: hrefAttr,
+      target: anchor.getAttribute("target"),
+      download: anchor.hasAttribute("download"),
+      sameOrigin: url ? url.origin === window.location.origin : false,
+    });
+    if (!navigable || !url) return;
+    event.preventDefault();
+    navigate(`${url.pathname}${url.search}`);
+  };
+
+  return (
+    <AppView
+      route={route}
+      session={session}
+      syncing={syncing}
+      onSync={requestSync}
+      navigate={navigate}
+      onLinkClick={handleLinkClick}
+      error={error}
+      onRetry={() => void load()}
+      data={data}
+      latestDailyData={latestDailyData}
+      activityData={activityData}
+      repositoriesData={repositoriesData}
+    />
   );
 }

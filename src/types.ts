@@ -4,6 +4,7 @@ export type Scope = "public" | "all";
 export interface RouteState {
   scope: Scope;
   isOverview: boolean;
+  isRepositoryIndex: boolean;
   period: PeriodType;
   key: string;
   repository: string | null;
@@ -23,6 +24,7 @@ export interface Repository {
   github_updated_at: string | null;
   last_synced_at: string | null;
   deleted_at: string | null;
+  created_at: string;
 }
 
 export interface Commit {
@@ -88,8 +90,29 @@ export interface PeriodResponse {
   nextCursor: string | null;
 }
 
+export interface CommitsResponse {
+  commits: Commit[];
+}
+
 export interface LatestDailyResponse {
   records: ChangeRecord[];
+}
+
+export interface ActivityDay {
+  date: string;
+  commitCount: number;
+}
+
+export interface ActivityResponse {
+  scope: Scope;
+  repository: string | null;
+  start: string;
+  end: string;
+  days: ActivityDay[];
+}
+
+export interface RepositoriesResponse {
+  repositories: Repository[];
 }
 
 export interface SessionResponse {
@@ -101,6 +124,8 @@ export interface BootstrapData {
   path: string;
   periodData: PeriodResponse | null;
   latestDailyData: LatestDailyResponse | null;
+  activityData: ActivityResponse | null;
+  repositoriesData: RepositoriesResponse | null;
   session: SessionResponse | null;
   error: string | null;
 }

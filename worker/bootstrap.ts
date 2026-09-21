@@ -1,5 +1,11 @@
 import type { SessionRow } from "./domain";
-import { getLatestDailyRecords, getPeriodRecords } from "./api";
+import {
+  getDailyActivity,
+  getLatestDailyRecords,
+  getPeriodRecords,
+  listRepositories,
+} from "./api";
+import { renderAppHtml } from "./render";
 import { parseRoute } from "../src/routes";
 import type { BootstrapData, RouteState } from "../src/types";
 
@@ -20,6 +26,8 @@ function emptyBootstrap(request: Request): BootstrapData {
     path: requestPath(request),
     periodData: null,
     latestDailyData: null,
+    activityData: null,
+    repositoriesData: null,
     session: null,
     error: null,
   };
@@ -42,12 +50,31 @@ async function loadBootstrapData(
       }
     : null;
   try {
+    if (route.isRepositoryIndex) {
+      bootstrap.repositoriesData = {
+        repositories: await listRepositories(env.DB, route.scope),
+      };
+      return bootstrap;
+    }
+
     if (route.isOverview) {
-      bootstrap.latestDailyData = await getLatestDailyRecords({
-        env,
-        scope: "public",
-        limit: 5,
-      });
+      // The feed and the activity graph are independent queries, so the
+      // overview only waits for the slower of the two.
+      const [latestDailyData, activityData] = await Promise.all([
+        getLatestDailyRecords({
+          env,
+          scope: route.scope,
+          repositoryName: route.repository ?? undefined,
+          days: 5,
+        }),
+        getDailyActivity({
+          env,
+          scope: route.scope,
+          repositoryName: route.repository ?? undefined,
+        }),
+      ]);
+      bootstrap.latestDailyData = latestDailyData;
+      bootstrap.activityData = activityData;
       return bootstrap;
     }
 
@@ -58,6 +85,7 @@ async function loadBootstrapData(
       periodKey: route.key,
       repositoryName: route.repository ?? undefined,
       cursor: route.cursor,
+      includeCommits: false,
     });
   } catch (error) {
     bootstrap.error =
@@ -70,6 +98,7 @@ function injectBootstrap(
   response: Response,
   bootstrap: BootstrapData,
   nonce: string,
+  appHtml: string,
 ): Response {
   const script = `<script nonce="${nonce}">window.__CHANGES_BOOTSTRAP__=${serializeBootstrap(bootstrap)};</script>`;
   return new HTMLRewriter()
@@ -85,6 +114,13 @@ function injectBootstrap(
     .on("head", {
       element(element) {
         element.append(script, { html: true });
+      },
+    })
+    .on("#root", {
+      element(element) {
+        // Server-rendered markup for the current route, so the response
+        // shows real content before the client bundle hydrates it.
+        element.setInnerContent(appHtml, { html: true });
       },
     })
     .transform(response);
@@ -138,5 +174,6 @@ export async function serveBootstrappedShell(options: {
     }),
     bootstrap,
     options.nonce,
+    renderAppHtml(route, bootstrap),
   );
 }

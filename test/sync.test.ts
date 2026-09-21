@@ -2,6 +2,8 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import type { RepositoryRow } from "../worker/domain";
 import type { GitHubCommit } from "../worker/github";
+import { isSummaryGenerationDue } from "../worker/records";
+import { periodBoundsForInstant } from "../worker/lib/time";
 import { initialSince, isStorableCommit } from "../worker/sync";
 
 const NOW = "2026-08-20T01:00:00.000Z";
@@ -20,6 +22,7 @@ function repository(lastSyncedAt: string | null): RepositoryRow {
     github_updated_at: null,
     last_synced_at: lastSyncedAt,
     deleted_at: null,
+    created_at: "2026-05-01T00:00:00.000Z",
   };
 }
 
@@ -117,5 +120,52 @@ describe("which commits are stored", () => {
 
     await expect(insertMerge(1)).rejects.toThrow();
     await expect(insertMerge(0)).resolves.toBeDefined();
+  });
+});
+
+describe("summary generation cadence", () => {
+  const now = "2026-08-20T01:00:00.000Z";
+
+  it("always refreshes daily and completed periods", () => {
+    expect(
+      isSummaryGenerationDue(
+        periodBoundsForInstant("daily", now),
+        "2026-08-20T00:30:00.000Z",
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      isSummaryGenerationDue(
+        periodBoundsForInstant("weekly", "2026-08-10T01:00:00.000Z"),
+        now,
+        now,
+      ),
+    ).toBe(true);
+  });
+
+  it("refreshes the current week at most once per Tokyo day", () => {
+    const bounds = periodBoundsForInstant("weekly", now);
+    expect(
+      isSummaryGenerationDue(bounds, "2026-08-19T23:00:00.000Z", now),
+    ).toBe(false);
+    expect(
+      isSummaryGenerationDue(bounds, "2026-08-19T14:00:00.000Z", now),
+    ).toBe(true);
+  });
+
+  it("refreshes the current month at most once per Tokyo week", () => {
+    const bounds = periodBoundsForInstant("monthly", now);
+    expect(
+      isSummaryGenerationDue(bounds, "2026-08-16T01:00:00.000Z", now),
+    ).toBe(false);
+    expect(
+      isSummaryGenerationDue(bounds, "2026-08-15T14:00:00.000Z", now),
+    ).toBe(true);
+  });
+
+  it("allows the first summary for every period immediately", () => {
+    expect(
+      isSummaryGenerationDue(periodBoundsForInstant("monthly", now), null, now),
+    ).toBe(true);
   });
 });

@@ -85,9 +85,28 @@ export function buildPath(
   return cursor ? `${path}?cursor=${encodeURIComponent(cursor)}` : path;
 }
 
+export function periodNavigationPath(
+  route: RouteState,
+  period: PeriodType,
+  latestDailyKey?: string,
+): string {
+  return buildPath(route, {
+    period,
+    key: route.isOverview && period === "daily" ? latestDailyKey : undefined,
+    cursor: null,
+  });
+}
+
 export function isOverviewPath(pathname: string): boolean {
   const parts = pathname.split("/").filter(Boolean);
-  return parts.length === 0 || (parts.length === 1 && parts[0] === "public");
+  if (parts[0] === "public" || parts[0] === "all") parts.shift();
+  return parts.length === 0 || (parts[0] === "repo" && parts.length <= 2);
+}
+
+export function isRepositoryIndexPath(pathname: string): boolean {
+  const parts = pathname.split("/").filter(Boolean);
+  if (parts[0] === "public" || parts[0] === "all") parts.shift();
+  return parts.length === 1 && parts[0] === "repo";
 }
 
 function decodeRepository(value: string): string | null {
@@ -104,6 +123,7 @@ export function parseRoute(
 ): RouteState {
   const parts = location.pathname.split("/").filter(Boolean);
   const isOverview = isOverviewPath(location.pathname);
+  const isRepositoryIndex = isRepositoryIndexPath(location.pathname);
   let index = 0;
   const scope: Scope = parts[0] === "all" ? "all" : "public";
   if (scope === "all") index += 1;
@@ -133,6 +153,7 @@ export function parseRoute(
   const route = {
     scope,
     isOverview,
+    isRepositoryIndex,
     period,
     key: normalizedKey,
     repository,
@@ -160,4 +181,39 @@ export function isBeforeDataCutoffPeriod(
   key: string,
 ): boolean {
   return isPeriodKeyBeforeDataCutoff(type, key);
+}
+
+export function keyboardShortcutPath(
+  route: RouteState,
+  key: string,
+  periodNavigation?: { previousKey: string; nextKey: string },
+  now = new Date(),
+): string | null {
+  if (key.toLowerCase() === "t") {
+    const latestKey = currentPeriodKey(route.period, now);
+    if (!route.isOverview && route.key === latestKey) return null;
+    return buildPath(route, { key: latestKey, cursor: null });
+  }
+  const periodByKey: Partial<Record<string, PeriodType>> = {
+    d: "daily",
+    w: "weekly",
+    m: "monthly",
+  };
+  const period = periodByKey[key.toLowerCase()];
+  if (period) {
+    if (!route.isOverview && route.period === period) return null;
+    return buildPath(route, { period, cursor: null });
+  }
+  if (route.isOverview || !periodNavigation) return null;
+  if (key.toLowerCase() === "p") {
+    return isBeforeDataCutoffPeriod(route.period, periodNavigation.previousKey)
+      ? null
+      : buildPath(route, { key: periodNavigation.previousKey, cursor: null });
+  }
+  if (key.toLowerCase() === "n") {
+    return isFuturePeriod(route.period, route.key)
+      ? null
+      : buildPath(route, { key: periodNavigation.nextKey, cursor: null });
+  }
+  return null;
 }

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildPath, isOverviewPath, parseRoute } from "../src/routes";
+import {
+  buildPath,
+  isOverviewPath,
+  isRepositoryIndexPath,
+  keyboardShortcutPath,
+  parseRoute,
+  periodNavigationPath,
+} from "../src/routes";
 
 describe("frontend routes", () => {
   it("keeps the public roots on the overview", () => {
@@ -15,20 +22,65 @@ describe("frontend routes", () => {
     expect(canonicalPaths).toEqual([]);
   });
 
-  it("treats dated and authenticated routes as period pages", () => {
-    expect(isOverviewPath("/daily/2026-08-24")).toBe(false);
-    expect(isOverviewPath("/all")).toBe(false);
-    expect(isOverviewPath("/public/daily/2026-08-24")).toBe(false);
+  it("treats public repository roots as overview pages", () => {
+    expect(isOverviewPath("/repo/kinki-zoo/")).toBe(true);
+    expect(isOverviewPath("/public/repo/kinki-zoo")).toBe(true);
+
+    const canonicalPaths: string[] = [];
+    const route = parseRoute(
+      { pathname: "/repo/kinki-zoo/", search: "" },
+      (path) => canonicalPaths.push(path),
+    );
+    expect(route.isOverview).toBe(true);
+    expect(route.scope).toBe("public");
+    expect(route.repository).toBe("kinki-zoo");
+    expect(canonicalPaths).toEqual([]);
   });
 
-  it("canonicalizes the authenticated root to its current daily page", () => {
+  it("treats the repository index as an overview page", () => {
+    expect(isOverviewPath("/repo/")).toBe(true);
+    expect(isOverviewPath("/repo")).toBe(true);
+    expect(isOverviewPath("/all/repo/")).toBe(true);
+    expect(isRepositoryIndexPath("/repo/")).toBe(true);
+    expect(isRepositoryIndexPath("/repo")).toBe(true);
+    expect(isRepositoryIndexPath("/all/repo/")).toBe(true);
+    expect(isRepositoryIndexPath("/repo/kinki-zoo/")).toBe(false);
+    expect(isRepositoryIndexPath("/")).toBe(false);
+
+    const canonicalPaths: string[] = [];
+    const route = parseRoute({ pathname: "/repo/", search: "" }, (path) =>
+      canonicalPaths.push(path),
+    );
+    expect(route.isOverview).toBe(true);
+    expect(route.isRepositoryIndex).toBe(true);
+    expect(route.repository).toBeNull();
+    expect(canonicalPaths).toEqual([]);
+
+    const repoRoute = parseRoute({
+      pathname: "/repo/kinki-zoo/",
+      search: "",
+    });
+    expect(repoRoute.isRepositoryIndex).toBe(false);
+  });
+
+  it("treats dated routes as period pages", () => {
+    expect(isOverviewPath("/daily/2026-08-24")).toBe(false);
+    expect(isOverviewPath("/public/daily/2026-08-24")).toBe(false);
+    expect(isOverviewPath("/repo/kinki-zoo/daily/2026-08-24")).toBe(false);
+  });
+
+  it("keeps authenticated roots on overview pages", () => {
     const canonicalPaths: string[] = [];
     const route = parseRoute({ pathname: "/all", search: "" }, (path) =>
       canonicalPaths.push(path),
     );
 
-    expect(route.isOverview).toBe(false);
-    expect(canonicalPaths).toEqual([`/all/daily/${route.key}`]);
+    expect(isOverviewPath("/all")).toBe(true);
+    expect(isOverviewPath("/all/")).toBe(true);
+    expect(isOverviewPath("/all/repo/kinki-zoo/")).toBe(true);
+    expect(route.scope).toBe("all");
+    expect(route.isOverview).toBe(true);
+    expect(canonicalPaths).toEqual([]);
   });
 
   it("clamps routes and period switches to the data cutoff", () => {
@@ -50,5 +102,66 @@ describe("frontend routes", () => {
         { period: "monthly" },
       ),
     ).toBe("/monthly/2026-05");
+  });
+
+  it("builds period and previous/next keyboard shortcut paths", () => {
+    const route = parseRoute({ pathname: "/daily/2026-08-20", search: "" });
+    const navigation = {
+      previousKey: "2026-08-19",
+      nextKey: "2026-08-21",
+    };
+    expect(keyboardShortcutPath(route, "p", navigation)).toBe(
+      "/daily/2026-08-19",
+    );
+    expect(keyboardShortcutPath(route, "N", navigation)).toBe(
+      "/daily/2026-08-21",
+    );
+    expect(keyboardShortcutPath(route, "w", navigation)).toBe(
+      "/weekly/2026-08-16",
+    );
+    expect(keyboardShortcutPath(route, "m", navigation)).toBe(
+      "/monthly/2026-08",
+    );
+    expect(keyboardShortcutPath(route, "d", navigation)).toBeNull();
+  });
+
+  it("supports period shortcuts but not navigation shortcuts on overviews", () => {
+    const route = parseRoute({ pathname: "/all/", search: "" });
+    expect(keyboardShortcutPath(route, "d")).toBe(`/all/daily/${route.key}`);
+    expect(keyboardShortcutPath(route, "n")).toBeNull();
+    expect(keyboardShortcutPath(route, "p")).toBeNull();
+  });
+
+  it("links Daily on an overview to the latest day with changes", () => {
+    const route = parseRoute({ pathname: "/", search: "" });
+
+    expect(periodNavigationPath(route, "daily", "2026-09-09")).toBe(
+      "/daily/2026-09-09",
+    );
+    expect(periodNavigationPath(route, "weekly", "2026-09-09")).toBe(
+      buildPath(route, { period: "weekly" }),
+    );
+  });
+
+  it("keeps the period while moving to today with the keyboard shortcut", () => {
+    const now = new Date("2026-08-31T12:00:00+09:00");
+    const daily = parseRoute({ pathname: "/daily/2026-08-20", search: "" });
+    const weekly = parseRoute({
+      pathname: "/weekly/2026-08-16",
+      search: "",
+    });
+    const monthly = parseRoute({
+      pathname: "/monthly/2026-07",
+      search: "",
+    });
+    expect(keyboardShortcutPath(daily, "t", undefined, now)).toBe(
+      "/daily/2026-08-31",
+    );
+    expect(keyboardShortcutPath(weekly, "T", undefined, now)).toBe(
+      "/weekly/2026-08-30",
+    );
+    expect(keyboardShortcutPath(monthly, "t", undefined, now)).toBe(
+      "/monthly/2026-08",
+    );
   });
 });

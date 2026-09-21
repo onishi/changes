@@ -1,8 +1,14 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import type { BootstrapData } from "../src/types";
+import type {
+  ActivityResponse,
+  BootstrapData,
+  PeriodResponse,
+} from "../src/types";
 import { app } from "../worker/app";
 import { serializeBootstrap } from "../worker/bootstrap";
+import { hmacSha256 } from "../worker/lib/crypto";
+import { decodePng, faviconCellCenter } from "./png";
 
 const shell = `<!doctype html><html><head><title>changes</title></head><body><div id="root"></div><script type="module" src="/assets/index.js"></script></body></html>`;
 
@@ -48,6 +54,117 @@ function extractBootstrap(html: string): BootstrapData {
   return JSON.parse(html.slice(start + prefix.length, end)) as BootstrapData;
 }
 
+async function insertPublicRepository(): Promise<void> {
+  const now = "2026-08-20T12:00:00.000Z";
+  await env.DB.prepare(
+    `INSERT INTO repositories (
+       id, owner_login, name, full_name, visibility, html_url, default_branch,
+       is_archived, is_fork, github_updated_at, last_synced_at, deleted_at,
+       created_at, updated_at
+     ) VALUES (?, ?, ?, ?, 'public', ?, 'main', 0, 0, ?, NULL, NULL, ?, ?)`,
+  )
+    .bind(
+      "repo_public",
+      "onishi",
+      "kinki-zoo",
+      "onishi/kinki-zoo",
+      "https://github.com/onishi/kinki-zoo",
+      now,
+      now,
+      now,
+    )
+    .run();
+}
+
+async function insertRepository(options: {
+  id: string;
+  name: string;
+  githubUpdatedAt: string;
+}): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO repositories (
+       id, owner_login, name, full_name, visibility, html_url, default_branch,
+       is_archived, is_fork, github_updated_at, last_synced_at, deleted_at,
+       created_at, updated_at
+     ) VALUES (?, ?, ?, ?, 'public', ?, 'main', 0, 0, ?, NULL, NULL, ?, ?)`,
+  )
+    .bind(
+      options.id,
+      "onishi",
+      options.name,
+      `onishi/${options.name}`,
+      `https://github.com/onishi/${options.name}`,
+      options.githubUpdatedAt,
+      options.githubUpdatedAt,
+      options.githubUpdatedAt,
+    )
+    .run();
+}
+
+const tokyoDayFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Tokyo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+// The activity graph is anchored on today, so its fixtures are too: dates
+// hard-coded here would eventually fall out of the graph's window.
+function tokyoDayKey(daysAgo = 0): string {
+  return tokyoDayFormatter.format(
+    new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000),
+  );
+}
+
+async function insertDailyRecord(options: {
+  repositoryId: string;
+  periodKey: string;
+  commitCount: number;
+  scope?: "public" | "all";
+}): Promise<void> {
+  const scope = options.scope ?? "public";
+  const start = `${options.periodKey}T00:00:00+09:00`;
+  const startIso = new Date(start).toISOString();
+  const endIso = new Date(
+    new Date(start).getTime() + 24 * 60 * 60 * 1000,
+  ).toISOString();
+  await env.DB.prepare(
+    `INSERT INTO change_records (
+       id, scope, period_type, period_key, period_start, period_end,
+       repository_id, commit_count, first_committed_at, last_committed_at,
+       source_fingerprint, summary_status, created_at, updated_at
+     ) VALUES (?, ?, 'daily', ?, ?, ?, ?, ?, ?, ?, ?, 'ready', ?, ?)`,
+  )
+    .bind(
+      `${scope}:daily:${options.periodKey}:${options.repositoryId}`,
+      scope,
+      options.periodKey,
+      startIso,
+      endIso,
+      options.repositoryId,
+      options.commitCount,
+      startIso,
+      startIso,
+      `fingerprint-${scope}-${options.periodKey}-${options.repositoryId}`,
+      startIso,
+      startIso,
+    )
+    .run();
+}
+
+async function authenticatedHeaders(): Promise<HeadersInit> {
+  const token = "test-session-token";
+  const now = "2026-08-20T12:00:00.000Z";
+  await env.DB.prepare(
+    `INSERT INTO sessions (
+       token_hash, github_user_id, github_login, created_at, last_seen_at, expires_at
+     ) VALUES (?, '14186', 'onishi', ?, ?, '2999-01-01T00:00:00.000Z')`,
+  )
+    .bind(await hmacSha256(testEnv().SESSION_SECRET, token), now, now)
+    .run();
+  return { Cookie: `changes_session=${token}` };
+}
+
 describe("HTTP access boundaries", () => {
   it("serves health and public period APIs without authentication", async () => {
     const health = await app.request("/api/health", {}, testEnv());
@@ -61,6 +178,17 @@ describe("HTTP access boundaries", () => {
     );
     expect(period.status).toBe(200);
     expect(period.headers.get("Cache-Control")).toContain("public");
+    const periodBody: PeriodResponse = await period.json();
+    expect(
+      periodBody.records.every((record) => record.commits.length === 0),
+    ).toBe(true);
+
+    const missingCommits = await app.request(
+      "/api/public/records/missing/commits",
+      {},
+      testEnv(),
+    );
+    expect(missingCommits.status).toBe(404);
 
     const latestDaily = await app.request(
       "/api/public/latest-daily",
@@ -105,6 +233,25 @@ describe("HTTP access boundaries", () => {
     expect(pageResponse.headers.get("Location")).toContain("/api/auth/login");
   });
 
+  it("serves the authenticated all overview and latest-daily API", async () => {
+    const headers = await authenticatedHeaders();
+    const response = await app.request("/all/", { headers }, testEnv());
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    const bootstrap = extractBootstrap(await response.text());
+    expect(bootstrap.path).toBe("/all/");
+    expect(bootstrap.latestDailyData).toEqual({ records: [] });
+    expect(bootstrap.periodData).toBeNull();
+
+    const apiResponse = await app.request(
+      "/api/all/latest-daily",
+      { headers },
+      testEnv(),
+    );
+    expect(apiResponse.status).toBe(200);
+    expect(apiResponse.headers.get("Cache-Control")).toBe("private, no-store");
+  });
+
   it("rejects a cross-origin sync request before queueing work", async () => {
     const response = await app.request(
       "/api/all/sync",
@@ -119,11 +266,279 @@ describe("HTTP access boundaries", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toContain("public");
 
-    const bootstrap = extractBootstrap(await response.text());
+    const html = await response.text();
+    const bootstrap = extractBootstrap(html);
     expect(bootstrap.path).toBe("/");
     expect(bootstrap.latestDailyData).not.toBeNull();
     expect(bootstrap.periodData).toBeNull();
     expect(bootstrap.error).toBeNull();
+
+    expect(html).not.toContain('<div id="root"></div>');
+    expect(html).toContain('<div id="root"><div class="app-shell"');
+    expect(html).toContain("No changes yet.");
+  });
+
+  it("server-renders period page content into the HTML shell", async () => {
+    const response = await app.request("/daily/2026-08-20", {}, testEnv());
+    expect(response.status).toBe(200);
+    const html = await response.text();
+
+    expect(html).toContain('<div id="root"><div class="app-shell"');
+    // The heading and stats the client would otherwise only paint after
+    // fetching /api/public/periods/daily/2026-08-20 client-side.
+    expect(html).toContain("Aug 20, 2026");
+    expect(html).toContain("No changes in this period");
+  });
+
+  it("embeds repository overview data and exposes its latest-daily API", async () => {
+    await insertPublicRepository();
+
+    const response = await app.request("/repo/kinki-zoo/", {}, testEnv());
+    expect(response.status).toBe(200);
+    const bootstrap = extractBootstrap(await response.text());
+    expect(bootstrap.path).toBe("/repo/kinki-zoo/");
+    expect(bootstrap.latestDailyData).toEqual({ records: [] });
+    expect(bootstrap.periodData).toBeNull();
+    expect(bootstrap.error).toBeNull();
+
+    const apiResponse = await app.request(
+      "/api/public/repositories/kinki-zoo/latest-daily",
+      {},
+      testEnv(),
+    );
+    expect(apiResponse.status).toBe(200);
+    await expect(apiResponse.json()).resolves.toEqual({ records: [] });
+  });
+
+  it("embeds a repository index listing and exposes its API", async () => {
+    await insertPublicRepository();
+
+    const response = await app.request("/repo/", {}, testEnv());
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    const bootstrap = extractBootstrap(html);
+    expect(bootstrap.path).toBe("/repo/");
+    expect(bootstrap.repositoriesData?.repositories).toHaveLength(1);
+    expect(bootstrap.repositoriesData?.repositories[0]?.name).toBe("kinki-zoo");
+    expect(bootstrap.latestDailyData).toBeNull();
+    expect(bootstrap.periodData).toBeNull();
+    expect(bootstrap.error).toBeNull();
+    expect(html).toContain("kinki-zoo");
+
+    const apiResponse = await app.request(
+      "/api/public/repositories",
+      {},
+      testEnv(),
+    );
+    expect(apiResponse.status).toBe(200);
+    const body: { repositories: { name: string }[] } = await apiResponse.json();
+    expect(body.repositories).toHaveLength(1);
+    expect(body.repositories[0]?.name).toBe("kinki-zoo");
+  });
+
+  it("sorts repositories by recency and drops those before the data cutoff", async () => {
+    await insertPublicRepository();
+    await insertRepository({
+      id: "repo_recent",
+      name: "aurora",
+      githubUpdatedAt: "2026-08-25T00:00:00.000Z",
+    });
+    await insertRepository({
+      id: "repo_stale",
+      name: "old-project",
+      githubUpdatedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const apiResponse = await app.request(
+      "/api/public/repositories",
+      {},
+      testEnv(),
+    );
+    const body: { repositories: { name: string }[] } = await apiResponse.json();
+    expect(body.repositories.map((repository) => repository.name)).toEqual([
+      "aurora",
+      "kinki-zoo",
+    ]);
+  });
+
+  it("requires authentication for the private repository index", async () => {
+    const response = await app.request("/all/repo/", {}, testEnv());
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toContain("/api/auth/login");
+
+    const apiResponse = await app.request(
+      "/api/all/repositories",
+      {},
+      testEnv(),
+    );
+    expect(apiResponse.status).toBe(401);
+  });
+
+  it("returns not found for an unknown repository overview API", async () => {
+    const response = await app.request(
+      "/api/public/repositories/missing/latest-daily",
+      {},
+      testEnv(),
+    );
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: "Repository not found.",
+    });
+  });
+
+  it("serves daily commit activity and embeds it in the overview shell", async () => {
+    await insertPublicRepository();
+    await insertRepository({
+      id: "repo_second",
+      name: "aurora",
+      githubUpdatedAt: "2026-08-25T00:00:00.000Z",
+    });
+    const today = tokyoDayKey();
+    const yesterday = tokyoDayKey(1);
+    await insertDailyRecord({
+      repositoryId: "repo_public",
+      periodKey: yesterday,
+      commitCount: 3,
+    });
+    await insertDailyRecord({
+      repositoryId: "repo_second",
+      periodKey: yesterday,
+      commitCount: 4,
+    });
+    await insertDailyRecord({
+      repositoryId: "repo_public",
+      periodKey: today,
+      commitCount: 1,
+    });
+
+    const apiResponse = await app.request(
+      "/api/public/activity",
+      {},
+      testEnv(),
+    );
+    expect(apiResponse.status).toBe(200);
+    expect(apiResponse.headers.get("Cache-Control")).toContain("public");
+    const activity: ActivityResponse = await apiResponse.json();
+    expect(activity.repository).toBeNull();
+    expect(activity.end).toBe(today);
+    // Only days that saw commits, with every repository in scope summed up.
+    expect(activity.days).toEqual([
+      { date: yesterday, commitCount: 7 },
+      { date: today, commitCount: 1 },
+    ]);
+    // The graph never reaches back past the day the data itself starts.
+    expect(activity.start >= "2026-04-26").toBe(true);
+
+    const response = await app.request("/", {}, testEnv());
+    const html = await response.text();
+    const bootstrap = extractBootstrap(html);
+    expect(bootstrap.activityData?.days).toHaveLength(2);
+    expect(html).toContain("activity-grid");
+    expect(html).toContain("7 commits on ");
+    expect(html).toContain("8 commits in the last ");
+  });
+
+  it("scopes commit activity to a repository and hides private commits", async () => {
+    await insertPublicRepository();
+    await insertRepository({
+      id: "repo_second",
+      name: "aurora",
+      githubUpdatedAt: "2026-08-25T00:00:00.000Z",
+    });
+    const today = tokyoDayKey();
+    await insertDailyRecord({
+      repositoryId: "repo_public",
+      periodKey: today,
+      commitCount: 3,
+    });
+    await insertDailyRecord({
+      repositoryId: "repo_second",
+      periodKey: today,
+      commitCount: 4,
+    });
+    await insertDailyRecord({
+      repositoryId: "repo_public",
+      periodKey: today,
+      commitCount: 9,
+      scope: "all",
+    });
+
+    const response = await app.request(
+      "/api/public/repositories/kinki-zoo/activity",
+      {},
+      testEnv(),
+    );
+    expect(response.status).toBe(200);
+    const activity: ActivityResponse = await response.json();
+    expect(activity.repository).toBe("kinki-zoo");
+    // The public scope must not pick up the all-scope record for the same day.
+    expect(activity.days).toEqual([{ date: today, commitCount: 3 }]);
+
+    const missing = await app.request(
+      "/api/public/repositories/missing/activity",
+      {},
+      testEnv(),
+    );
+    expect(missing.status).toBe(404);
+  });
+
+  it("requires authentication for the private activity API", async () => {
+    const response = await app.request("/api/all/activity", {}, testEnv());
+    expect(response.status).toBe(401);
+
+    const headers = await authenticatedHeaders();
+    const authenticated = await app.request(
+      "/api/all/activity",
+      { headers },
+      testEnv(),
+    );
+    expect(authenticated.status).toBe(200);
+    expect(authenticated.headers.get("Cache-Control")).toBe(
+      "private, no-store",
+    );
+  });
+
+  it("draws the last seven weeks of public commits as the favicon", async () => {
+    await insertPublicRepository();
+    await insertDailyRecord({
+      repositoryId: "repo_public",
+      periodKey: tokyoDayKey(),
+      commitCount: 5,
+    });
+
+    const response = await app.request("/favicon.png", {}, testEnv());
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("image/png");
+    expect(response.headers.get("Cache-Control")).toContain("public");
+
+    const image = await decodePng(new Uint8Array(await response.arrayBuffer()));
+    expect(image.width).toBe(512);
+    // Today is the only day with commits, so it is the darkest shade and it
+    // sits in the bottom right corner of the square.
+    expect(image.pixel(...faviconCellCenter(6, 6))).toEqual([39, 93, 71]);
+    expect(image.pixel(...faviconCellCenter(0, 0))).toEqual([230, 224, 211]);
+  });
+
+  it("keeps private commits out of the favicon", async () => {
+    await insertRepository({
+      id: "repo_private",
+      name: "secret",
+      githubUpdatedAt: "2026-08-25T00:00:00.000Z",
+    });
+    await env.DB.prepare(
+      "UPDATE repositories SET visibility = 'private' WHERE id = 'repo_private'",
+    ).run();
+    await insertDailyRecord({
+      repositoryId: "repo_private",
+      periodKey: tokyoDayKey(),
+      commitCount: 9,
+      scope: "all",
+    });
+
+    const response = await app.request("/favicon.png", {}, testEnv());
+    const image = await decodePng(new Uint8Array(await response.arrayBuffer()));
+    // Nothing public happened, so every day stays empty.
+    expect(image.pixel(...faviconCellCenter(6, 6))).toEqual([230, 224, 211]);
   });
 
   it("embeds period data and canonicalizes old page routes", async () => {
@@ -186,6 +601,8 @@ describe("HTTP access boundaries", () => {
       path: "</script>",
       periodData: null,
       latestDailyData: null,
+      activityData: null,
+      repositoriesData: null,
       session: null,
       error: "line\u2028separator",
     });

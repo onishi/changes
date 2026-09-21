@@ -16,7 +16,7 @@ GitHub のコミット履歴を、日次・週次・月次の changelog とし�
 
 - `public`: 誰でも閲覧可能。public リポジトリのコミットだけを表示する
 - `all`: GitHub 認証済みかつ許可されたユーザーだけが閲覧可能。public/private 両方を表示する
-- owner 配下のリポジトリのコミットは、誰が書いたかによらずすべて対象にする。共同メンテナや AI によるコミットも、そのリポジトリで起きた変更として扱う
+- owner 配下リポジトリの default branch に入ったコミットをすべて対象とし、commit author が誰に紐づくかでは絞り込まない。エージェントが owner に代わって作成したコミット（author が `claude` など）や、GitHub 未登録のメールアドレスで作成したコミットも owner の活動として扱う
 - merge commit は対象にしない。merge が取り込むコミットは default branch 上に個別に存在して実際の変更を持つため、merge commit を残すとコミット数が二重に膨らみ、要約のノイズになる
 - owner はアプリ設定で1つだけ指定し、別 owner や Organization 配下のリポジトリは対象にしない
 
@@ -83,7 +83,7 @@ public / all は表示範囲です。public では public リポジトリの変�
 
 ### GitHub コミットログへのリンク
 
-各変更レコードに「GitHub でコミットログを見る」リンクを表示します。リンク先は対象リポジトリの default branch のコミット履歴とし、owner と期間で絞り込みます。
+各変更レコードに「GitHub でコミットログを見る」リンクを表示します。リンク先は対象リポジトリの default branch のコミット履歴とし、期間で絞り込みます。同期側と同じ条件にするため author では絞り込みません。
 
 ```text
 https://github.com/:owner/:repo/commits?since=:since&until=:until
@@ -165,6 +165,10 @@ AI プロバイダーに private コードそのものは送信しません。�
 - 日付選択
 - リポジトリ選択
 - All へのサインイン、サインアウト
+
+### ファビコン
+
+`/favicon.png` は直近49日（7日×7週間）の public コミットを正方形の草として描き、worker がリクエスト時に 512×512 の PNG を生成します。高解像度の1枚だけを配信し、縮小はブラウザに任せます。private のコミットは CDN やタブに残るため含めません。
 
 ### 期間ページ
 
@@ -370,7 +374,7 @@ secret が未設定の場合、deploy job は wrangler の認証エラーでは�
 - `summary_refreshes_enqueued`: prompt version が古い ready / failed 要約を Cron から再投入した件数。1回最大25件
 - `queue_message_failed`: Queue message の種別、attempt、retryable 判定、秘密値を含まないエラー概要
 
-AI 要約は prompt で100文字程度・2〜3文を目安として指示し、schema は40〜300文字と余裕を持たせます。schema を目標値ぎりぎりに設定すると、JSON Mode の制約付き生成が上限で文字列を打ち切り、文が途中で終わった要約が生成されるためです。schema は文章量を制御する手段ではなく、異常な出力だけを弾く安全網として扱います。要約には期間やコミット件数を含めず、変更内容だけを記述します。JSON の途中切れなどで失敗したレコードは failed のままコミット一覧を表示し、prompt version を更新したリリース後の Cron で古い ready / failed 要約を新しい version に限って再投入します。
+AI 要約は prompt で100文字程度・2〜3文を目安として指示し、schema は40〜300文字と余裕を持たせます。schema を目標値ぎりぎりに設定すると、JSON Mode の制約付き生成が上限で文字列を打ち切り、文が途中で終わった要約が生成されるためです。schema は文章量を制御する手段ではなく、異常な出力だけを弾く安全網として扱います。リポジトリ名・期間・コミット件数は変更レコードの他のフィールドとして画面に表示するため、モデルにも渡さず、要約には変更内容だけを記述します。それでも『〜の要約です』のような前置きが出力された場合は、保存前に先頭のメタ文だけを機械的に取り除き、前置きしか残らない出力は failed として扱います。JSON の途中切れなどで失敗したレコードは failed のままコミット一覧を表示し、prompt version を更新したリリース後の Cron で古い ready / failed 要約を新しい version に限って再投入します。
 
 ### Cloudflare 公式リファレンス
 
@@ -429,10 +433,12 @@ GitHub コミットログ URL は永続化せず、owner、repository、period s
 ```text
 GET  /api/public/periods/:period/:date
 GET  /api/public/latest-daily
+GET  /api/public/activity
 GET  /api/public/repositories
 GET  /api/public/repositories/:repo/periods/:period/:date
 
 GET  /api/all/periods/:period/:date
+GET  /api/all/activity
 GET  /api/all/repositories
 GET  /api/all/repositories/:repo/periods/:period/:date
 
@@ -440,6 +446,8 @@ POST /api/internal/sync
 POST /api/internal/summaries/generate
 POST /api/webhooks/github
 ```
+
+`activity` はトップページの活動グラフ用に、直近1年（データ保持開始日まで）の日別コミット数を返します。コミットがあった日だけを返し、グラフの升目はクライアントが期間から組み立てます。
 
 `all` と internal API は認証または署名検証が必須です。API はリポジトリごとに集約された変更レコード配列と、次ページの cursor を返します。各変更レコードには AI 要約の状態、元コミット配列、期間指定済みの GitHub コミットログ URL を含めます。
 

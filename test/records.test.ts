@@ -1,6 +1,10 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { getLatestDailyRecords, getPeriodRecords } from "../worker/api";
+import {
+  getLatestDailyRecords,
+  getPeriodRecords,
+  getRecordCommits,
+} from "../worker/api";
 import type { RepositoryRow } from "../worker/domain";
 import { rebuildAffectedRecords } from "../worker/records";
 
@@ -17,6 +21,7 @@ const publicRepository: RepositoryRow = {
   github_updated_at: "2026-08-20T12:00:00.000Z",
   last_synced_at: null,
   deleted_at: null,
+  created_at: "2026-08-20T12:00:00.000Z",
 };
 
 const privateRepository: RepositoryRow = {
@@ -87,8 +92,15 @@ function testEnv(): Env {
 }
 
 describe("change record aggregation and public boundary", () => {
-  it("returns only the five newest daily records across dates", async () => {
+  it("returns every repository record from the five most recent days", async () => {
     await insertRepository(publicRepository);
+    await insertRepository({
+      ...publicRepository,
+      id: "repo_public_second",
+      name: "another-project",
+      full_name: "onishi/another-project",
+      html_url: "https://github.com/onishi/another-project",
+    });
     const committedAt = Array.from(
       { length: 6 },
       (_, index) =>
@@ -105,27 +117,71 @@ describe("change record aggregation and public boundary", () => {
       ),
     );
     await rebuildAffectedRecords(testEnv(), publicRepository, committedAt);
+    const secondRepository = {
+      ...publicRepository,
+      id: "repo_public_second",
+      name: "another-project",
+      full_name: "onishi/another-project",
+      html_url: "https://github.com/onishi/another-project",
+    };
+    await insertCommit(
+      secondRepository,
+      "same-day",
+      "2026-08-18T08:00:00.000Z",
+      "Another repository change",
+    );
+    await rebuildAffectedRecords(testEnv(), secondRepository, [
+      "2026-08-18T08:00:00.000Z",
+    ]);
 
     const result = await getLatestDailyRecords({
       env: testEnv(),
       scope: "public",
-      limit: 5,
+      days: 5,
+      now: new Date("2026-08-20T12:00:00.000Z"),
     });
 
-    expect(result.records).toHaveLength(5);
+    expect(result.records).toHaveLength(6);
     expect(result.records.map((record) => record.periodKey)).toEqual([
       "2026-08-20",
       "2026-08-19",
       "2026-08-18",
+      "2026-08-18",
       "2026-08-17",
       "2026-08-16",
     ]);
+    expect(result.records.map((record) => record.repository.name)).toContain(
+      "another-project",
+    );
     expect(
       result.records.every((record) => record.periodType === "daily"),
     ).toBe(true);
     expect(result.records.every((record) => record.commits.length === 0)).toBe(
       true,
     );
+
+    const repositoryResult = await getLatestDailyRecords({
+      env: testEnv(),
+      scope: "public",
+      repositoryName: publicRepository.name,
+      days: 5,
+      now: new Date("2026-08-20T12:00:00.000Z"),
+    });
+    expect(repositoryResult.records).toHaveLength(5);
+    expect(
+      repositoryResult.records.every(
+        (record) => record.repository.name === publicRepository.name,
+      ),
+    ).toBe(true);
+
+    await expect(
+      getLatestDailyRecords({
+        env: testEnv(),
+        scope: "public",
+        repositoryName: "missing-repository",
+        now: new Date("2026-08-20T12:00:00.000Z"),
+      }),
+    ).rejects.toThrow("Repository not found");
   });
 
   it("rejects future periods and malformed cursors", async () => {
@@ -199,6 +255,23 @@ describe("change record aggregation and public boundary", () => {
       includeCommits: false,
     });
     expect(preview.records[0]?.commits).toEqual([]);
+
+    const commits = await getRecordCommits({
+      env: testEnv(),
+      scope: "public",
+      recordId: preview.records[0]?.id ?? "",
+    });
+    expect(commits?.commits.map((commit) => commit.oid)).toEqual([
+      "bbb222",
+      "aaa111",
+    ]);
+    await expect(
+      getRecordCommits({
+        env: testEnv(),
+        scope: "all",
+        recordId: preview.records[0]?.id ?? "",
+      }),
+    ).resolves.toBeNull();
   });
 
   it("keeps only cutoff-and-later commits in the boundary week", async () => {
@@ -357,6 +430,17 @@ describe("change record aggregation and public boundary", () => {
     });
     expect(JSON.stringify(allResult)).toContain("secret-project");
     expect(allResult.stats).toEqual({ repository_count: 2, commit_count: 2 });
+
+    const allLatest = await getLatestDailyRecords({
+      env: testEnv(),
+      scope: "all",
+      days: 5,
+      now: new Date("2026-08-20T12:00:00.000Z"),
+    });
+    expect(allLatest.records.map((record) => record.repository.name)).toEqual([
+      "secret-project",
+      "changes",
+    ]);
   });
 
   it("returns 404-equivalent behavior for a private repository in public scope", async () => {

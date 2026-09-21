@@ -7,14 +7,19 @@ import {
   logout,
 } from "./auth";
 import {
+  getDailyActivity,
+  getFaviconActivity,
   getLatestDailyRecords,
   getPeriodRecords,
+  getRecordCommits,
   listRepositories,
 } from "./api";
 import type { QueueMessage, Scope, SessionRow } from "./domain";
 import { randomToken } from "./lib/crypto";
 import { isPeriodType } from "./records";
 import { serveBootstrappedShell } from "./bootstrap";
+import { renderActivityFavicon } from "./favicon";
+import { checkHealth } from "./monitor-health";
 
 type AppBindings = {
   Bindings: Env;
@@ -54,6 +59,7 @@ app.use("*", async (context, next) => {
 });
 
 app.get("/api/health", (context) => context.json({ status: "ok" }));
+app.get("/_monitor/health", (context) => checkHealth(context.env));
 app.get("/api/auth/login", (context) =>
   beginGitHubLogin(context.req.raw, context.env),
 );
@@ -106,6 +112,7 @@ async function periodResponse(
       periodKey: date,
       repositoryName,
       cursor: context.req.query("cursor"),
+      includeCommits: false,
     });
     context.header(
       "Cache-Control",
@@ -121,22 +128,98 @@ async function periodResponse(
   }
 }
 
+async function latestDailyResponse(
+  context: Context<AppBindings>,
+  scope: Scope,
+  repositoryName?: string,
+) {
+  try {
+    context.header(
+      "Cache-Control",
+      scope === "public"
+        ? "public, max-age=60, s-maxage=300"
+        : "private, no-store",
+    );
+    return context.json(
+      await getLatestDailyRecords({
+        env: context.env,
+        scope,
+        repositoryName,
+        days: 5,
+      }),
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Invalid request";
+    const status = message === "Repository not found." ? 404 : 400;
+    return context.json({ error: message }, status);
+  }
+}
+
+async function activityResponse(
+  context: Context<AppBindings>,
+  scope: Scope,
+  repositoryName?: string,
+) {
+  try {
+    context.header(
+      "Cache-Control",
+      scope === "public"
+        ? "public, max-age=60, s-maxage=300"
+        : "private, no-store",
+    );
+    return context.json(
+      await getDailyActivity({ env: context.env, scope, repositoryName }),
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Invalid request";
+    const status = message === "Repository not found." ? 404 : 400;
+    return context.json({ error: message }, status);
+  }
+}
+
 app.get("/api/public/repositories", async (context) => {
   context.header("Cache-Control", "public, max-age=60, s-maxage=300");
   return context.json({
     repositories: await listRepositories(context.env.DB, "public"),
   });
 });
-app.get("/api/public/latest-daily", async (context) => {
-  context.header("Cache-Control", "public, max-age=60, s-maxage=300");
-  return context.json(
-    await getLatestDailyRecords({
-      env: context.env,
-      scope: "public",
-      limit: 5,
-    }),
+app.get("/api/public/latest-daily", (context) =>
+  latestDailyResponse(context, "public"),
+);
+app.get("/api/public/repositories/:repo/latest-daily", (context) =>
+  latestDailyResponse(context, "public", context.req.param("repo")),
+);
+app.get("/api/all/latest-daily", (context) =>
+  latestDailyResponse(context, "all"),
+);
+app.get("/api/all/repositories/:repo/latest-daily", (context) =>
+  latestDailyResponse(context, "all", context.req.param("repo")),
+);
+// The last seven weeks of public commits, drawn as the square the browser
+// shows in the tab.
+app.get("/favicon.png", async (context) => {
+  const square = await getFaviconActivity({ env: context.env });
+  const png = await renderActivityFavicon(
+    square.map((column) => column.map((day) => day.level)),
   );
+  return new Response(png, {
+    headers: {
+      "Content-Type": "image/png",
+      "Cache-Control": "public, max-age=300, s-maxage=1800",
+    },
+  });
 });
+
+app.get("/api/public/activity", (context) =>
+  activityResponse(context, "public"),
+);
+app.get("/api/public/repositories/:repo/activity", (context) =>
+  activityResponse(context, "public", context.req.param("repo")),
+);
+app.get("/api/all/activity", (context) => activityResponse(context, "all"));
+app.get("/api/all/repositories/:repo/activity", (context) =>
+  activityResponse(context, "all", context.req.param("repo")),
+);
 app.get("/api/all/repositories", async (context) =>
   context.json({ repositories: await listRepositories(context.env.DB, "all") }),
 );
@@ -151,6 +234,34 @@ app.get("/api/public/repositories/:repo/periods/:period/:date", (context) =>
 );
 app.get("/api/all/repositories/:repo/periods/:period/:date", (context) =>
   periodResponse(context, "all", context.req.param("repo")),
+);
+
+async function recordCommitsResponse(
+  context: Context<AppBindings>,
+  scope: Scope,
+) {
+  const recordId = context.req.param("recordId");
+  if (!recordId) return context.json({ error: "Invalid change record." }, 400);
+  const result = await getRecordCommits({
+    env: context.env,
+    scope,
+    recordId,
+  });
+  if (!result) return context.json({ error: "Change record not found." }, 404);
+  context.header(
+    "Cache-Control",
+    scope === "public"
+      ? "public, max-age=60, s-maxage=300"
+      : "private, no-store",
+  );
+  return context.json(result);
+}
+
+app.get("/api/public/records/:recordId/commits", (context) =>
+  recordCommitsResponse(context, "public"),
+);
+app.get("/api/all/records/:recordId/commits", (context) =>
+  recordCommitsResponse(context, "all"),
 );
 
 app.post("/api/all/sync", async (context) => {
