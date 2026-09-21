@@ -5,6 +5,7 @@ import {
   isRepositoryIndexPath,
   keyboardShortcutPath,
   parseRoute,
+  periodNavigationPath,
 } from "../src/routes";
 
 describe("frontend routes", () => {
@@ -129,6 +130,17 @@ describe("frontend routes", () => {
     expect(keyboardShortcutPath(route, "d")).toBe(`/all/daily/${route.key}`);
     expect(keyboardShortcutPath(route, "n")).toBeNull();
     expect(keyboardShortcutPath(route, "p")).toBeNull();
+  });
+
+  it("links Daily on an overview to the latest day with changes", () => {
+    const route = parseRoute({ pathname: "/", search: "" });
+
+    expect(periodNavigationPath(route, "daily", "2026-09-09")).toBe(
+      "/daily/2026-09-09",
+    );
+    expect(periodNavigationPath(route, "weekly", "2026-09-09")).toBe(
+      buildPath(route, { period: "weekly" }),
+    );
   });
 
   it("keeps the period while moving to today with the keyboard shortcut", () => {
