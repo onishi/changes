@@ -142,10 +142,9 @@ function commitDataLines(commits: CommitRow[]): string[] {
   let sourceChars = 0;
 
   for (const commit of commits.slice(0, 100)) {
-    const merge = commit.is_merge === 1 ? " [merge]" : "";
     const body = normalizedCommitBody(commit.message_body);
     const block = [
-      `- headline:${merge} ${commit.message_headline.slice(0, 500)}`,
+      `- headline: ${commit.message_headline.slice(0, 500)}`,
       ...(body ? [`  body: ${body}`] : []),
     ].join("\n");
     if (

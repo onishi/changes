@@ -146,6 +146,11 @@ export async function renderActivityFavicon(
   if (levels.length !== ACTIVITY_SQUARE_SIZE) {
     throw new Error("The favicon needs one column per day of the week.");
   }
+  if (levels.some((column) => column.length !== ACTIVITY_SQUARE_SIZE)) {
+    throw new Error(
+      "The favicon needs one row per day of the week in every column.",
+    );
+  }
 
   const header = new Uint8Array(13);
   const headerView = new DataView(header.buffer);

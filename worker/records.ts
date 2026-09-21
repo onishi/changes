@@ -219,6 +219,8 @@ export function createCommitLogUrl(
   repository: Pick<RepositoryRow, "html_url">,
   bounds: PeriodBounds,
 ): string {
+  // Deliberately unfiltered by author, so the link shows the same commits the
+  // page does.
   const url = new URL(`${repository.html_url}/commits`);
   url.searchParams.set("since", clampInstantToDataCutoff(bounds.start));
   url.searchParams.set("until", bounds.endInclusive);

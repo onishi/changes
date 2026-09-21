@@ -17,6 +17,7 @@ GitHub のコミット履歴を、日次・週次・月次の changelog とし�
 - `public`: 誰でも閲覧可能。public リポジトリのコミットだけを表示する
 - `all`: GitHub 認証済みかつ許可されたユーザーだけが閲覧可能。public/private 両方を表示する
 - owner 配下リポジトリの default branch に入ったコミットをすべて対象とし、commit author が誰に紐づくかでは絞り込まない。エージェントが owner に代わって作成したコミット（author が `claude` など）や、GitHub 未登録のメールアドレスで作成したコミットも owner の活動として扱う
+- merge commit は対象にしない。merge が取り込むコミットは default branch 上に個別に存在して実際の変更を持つため、merge commit を残すとコミット数が二重に膨らみ、要約のノイズになる
 - owner はアプリ設定で1つだけ指定し、別 owner や Organization 配下のリポジトリは対象にしない
 
 複数ユーザーがそれぞれ自分の changelog を持つ SaaS 形式は、初期スコープには含めません。
@@ -137,7 +138,7 @@ AI 要約は変更レコード単位で、その期間・リポジトリに含�
 
 - 事実を補完・推測せず、入力されたコミット情報の範囲だけを要約する
 - 単なるコミット列挙ではなく、機能追加、修正、保守、ドキュメントなどのまとまりを優先する
-- merge commit や機械的な変更を識別し、要約のノイズを抑える
+- 機械的な変更を識別し、要約のノイズを抑える（merge commit はそもそも保存しない）
 - 対象コミットが少ない場合は簡潔にし、活動がない期間は要約を生成しない
 - 要約には生成日時と対象コミット集合の fingerprint を持たせ、入力が変わった場合だけ再生成する
 - public 用要約は public コミットだけ、all 用要約は認証された処理内ですべてのコミットを入力にする
@@ -351,7 +352,18 @@ GitHub App 作成時の値は次のとおりです。
 5. `https://changes.wagaya.org` で public、認証、API、Cron、Queue の smoke test を行う
 6. 問題がある場合は Worker version を rollback し、DB migration は backward-compatible な手順で戻す
 
-main branch から production へのデプロイには Cloudflare Workers Builds または GitHub Actions + Wrangler を使用します。production への反映は、CI が成功し、D1 migration と secret / binding の準備が完了した場合だけ行います。
+main branch から production へのデプロイは GitHub Actions で自動化しています。`.github/workflows/ci.yml` の `deploy` job が `verify` job の成功を `needs` で待ち、`main` への push のときだけ実行されます。Pull Request では実行されません。
+
+job は D1 migration を適用してから `npm run deploy` で Worker と Static Assets を同じ release としてデプロイします。migration を先に適用するのは、新しいコードが新しいスキーマに依存する場合があるためです。`concurrency` で deploy の同時実行を禁止し、`cancel-in-progress: false` として実行中の deploy を中断しません。migration だけ適用されてコードが伴わない状態を避けるためです。
+
+必要な repository secret は次の2つです。Settings → Secrets and variables → Actions に登録します。
+
+| Secret                  | 用途                                                                              |
+| ----------------------- | --------------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`  | Workers と D1 を操作する API token                                                |
+| `CLOUDFLARE_ACCOUNT_ID` | 対象の Cloudflare account ID。`wrangler.jsonc` に `account_id` を書かないため必要 |
+
+secret が未設定の場合、deploy job は wrangler の認証エラーではなく、どの secret が足りないかを示して失敗します。手元から緊急にデプロイする場合は従来どおり `npm run deploy` が使えます。
 
 ### 運用監視
 
@@ -393,7 +405,7 @@ AI 要約は prompt で100文字程度・2〜3文を目安として指示し、s
 - committed at
 - author GitHub user ID
 - URL
-- is merge commit
+- is merge commit（merge は保存しないため常に false。方針が変わった場合に備えて保持する）
 
 ### change_records
 

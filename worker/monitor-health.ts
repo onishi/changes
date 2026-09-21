@@ -3,7 +3,7 @@
  * 沿ったレスポンスを返す。仕様: https://github.com/onishi/monitor/blob/main/SPEC.md#22
  *
  * - web: D1への疎通確認
- * - batch: 30分毎のsync-owner/sync-repository/summary Cron Trigger（sync_runsテーブル）
+ * - batch: 30分毎のsync-owner Cron Trigger（sync_runsテーブル）
  */
 
 interface LatestRunRow {
@@ -17,8 +17,13 @@ interface LatestSuccessRow {
   completed_at: string;
 }
 
+const BATCH_EXPECTED_INTERVAL_SEC = 1800;
+const BATCH_RUNNING_TIMEOUT_MS = BATCH_EXPECTED_INTERVAL_SEC * 1000;
+const MONITORED_SYNC_RUN_JOB_TYPE = "sync-owner";
+
 export async function checkHealth(env: Env): Promise<Response> {
   const now = new Date().toISOString();
+  const nowMs = Date.parse(now);
 
   let webStatus: "ok" | "critical" = "ok";
   let webMessage = "D1への疎通に成功";
@@ -40,11 +45,15 @@ export async function checkHealth(env: Env): Promise<Response> {
   try {
     const [latest, latestSuccess] = await Promise.all([
       env.DB.prepare(
-        "SELECT status, started_at, completed_at, error_message FROM sync_runs ORDER BY started_at DESC LIMIT 1",
-      ).first<LatestRunRow>(),
+        "SELECT status, started_at, completed_at, error_message FROM sync_runs WHERE job_type = ? ORDER BY started_at DESC LIMIT 1",
+      )
+        .bind(MONITORED_SYNC_RUN_JOB_TYPE)
+        .first<LatestRunRow>(),
       env.DB.prepare(
-        "SELECT completed_at FROM sync_runs WHERE status = 'succeeded' ORDER BY started_at DESC LIMIT 1",
-      ).first<LatestSuccessRow>(),
+        "SELECT completed_at FROM sync_runs WHERE job_type = ? AND status = 'succeeded' ORDER BY started_at DESC LIMIT 1",
+      )
+        .bind(MONITORED_SYNC_RUN_JOB_TYPE)
+        .first<LatestSuccessRow>(),
     ]);
 
     if (latestSuccess?.completed_at) {
@@ -56,8 +65,18 @@ export async function checkHealth(env: Env): Promise<Response> {
         batchStatus = "ok";
         batchMessage = `直近実行は成功（${latest.completed_at ?? latest.started_at}）`;
       } else if (latest.status === "running") {
-        batchStatus = "ok";
-        batchMessage = `実行中（開始: ${latest.started_at}）`;
+        const startedAtMs = Date.parse(latest.started_at);
+        const runningTooLong =
+          Number.isFinite(startedAtMs) &&
+          nowMs - startedAtMs > BATCH_RUNNING_TIMEOUT_MS;
+        batchStatus = runningTooLong
+          ? lastSuccessAt
+            ? "warning"
+            : "critical"
+          : "ok";
+        batchMessage = runningTooLong
+          ? `実行中だが開始から30分以上経過（開始: ${latest.started_at}）`
+          : `実行中（開始: ${latest.started_at}）`;
       } else {
         batchStatus = lastSuccessAt ? "warning" : "critical";
         batchMessage = `直近実行が失敗: ${latest.error_message ?? "詳細不明"}`;
@@ -96,7 +115,7 @@ export async function checkHealth(env: Env): Promise<Response> {
         status: batchStatus,
         message: batchMessage,
         ...(lastSuccessAt ? { last_success_at: lastSuccessAt } : {}),
-        expected_interval_sec: 1800,
+        expected_interval_sec: BATCH_EXPECTED_INTERVAL_SEC,
         checked_at: now,
       },
     ],

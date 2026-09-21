@@ -6,6 +6,12 @@ import {
 
 const periods = new Set<PeriodType>(["daily", "weekly", "monthly"]);
 
+function isValidRouteKey(period: PeriodType, key: string): boolean {
+  return period === "monthly"
+    ? /^\d{4}-\d{2}$/.test(key)
+    : /^\d{4}-\d{2}-\d{2}$/.test(key);
+}
+
 function datePartsInTokyo(now: Date): {
   year: number;
   month: number;
@@ -109,6 +115,36 @@ export function isRepositoryIndexPath(pathname: string): boolean {
   return parts.length === 1 && parts[0] === "repo";
 }
 
+export function isAppPath(pathname: string): boolean {
+  const parts = pathname.split("/").filter(Boolean);
+  if (parts.length === 0) return true;
+  let index = 0;
+  if (parts[0] === "all") {
+    index += 1;
+    if (parts.length === index) return true;
+  }
+  if (parts[index] === "public") {
+    index += 1;
+    if (parts.length === index) return true;
+  }
+  if (parts[index] === "repo") {
+    const remaining = parts.length - index - 1;
+    if (remaining === 0 || remaining === 1) return true;
+    if (remaining !== 3) return false;
+    const period = parts[index + 2] as PeriodType | undefined;
+    const key = parts[index + 3] ?? "";
+    return !!period && periods.has(period) && isValidRouteKey(period, key);
+  }
+  const period = parts[index] as PeriodType | undefined;
+  const key = parts[index + 1] ?? "";
+  return (
+    !!period &&
+    periods.has(period) &&
+    parts.length === index + 2 &&
+    isValidRouteKey(period, key)
+  );
+}
+
 function decodeRepository(value: string): string | null {
   try {
     return decodeURIComponent(value);
@@ -139,10 +175,7 @@ export function parseRoute(
   const period =
     candidatePeriod && periods.has(candidatePeriod) ? candidatePeriod : "daily";
   const candidateKey = parts[index + 1];
-  const validKey =
-    period === "monthly"
-      ? /^\d{4}-\d{2}$/.test(candidateKey ?? "")
-      : /^\d{4}-\d{2}-\d{2}$/.test(candidateKey ?? "");
+  const validKey = isValidRouteKey(period, candidateKey ?? "");
   const key = validKey
     ? (candidateKey ?? currentPeriodKey(period))
     : currentPeriodKey(period);

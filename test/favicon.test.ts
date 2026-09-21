@@ -68,6 +68,20 @@ describe("favicon rendering", () => {
     );
   });
 
+  it("rejects a square whose columns are not seven rows tall", async () => {
+    await expect(
+      renderActivityFavicon([
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0],
+      ]),
+    ).rejects.toThrow("one row per day");
+  });
+
   it("keeps its shades in step with the stylesheet", () => {
     const { TEST_STYLES: styles } = env as typeof env & { TEST_STYLES: string };
     // The renderer cannot read CSS custom properties, so the two lists are

@@ -26,3 +26,42 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  deploy:
+    # Only after verify passes, and only for main. Pull requests never reach it.
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    concurrency:
+      # Never let two deploys overlap, and never cancel one part-way: an
+      # interrupted run could leave migrations applied without the code that
+      # goes with them.
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Check Cloudflare credentials
+        # Fail with something actionable rather than a wrangler auth error.
+        run: |
+          missing=""
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            echo "Missing repository secret(s):$missing" >&2
+            echo "Add them under Settings > Secrets and variables > Actions." >&2
+            exit 1
+          fi
+      - run: npm ci
+      # Migrations first: the new code may depend on the new schema.
+      - run: npm run d1:migrate:production
+      # Builds and ships the Worker and its static assets as one release.
+      - run: npm run deploy

@@ -9,6 +9,7 @@ import {
   listInstalledRepositories,
   listRepositoryCommitsPage,
   splitCommitMessage,
+  type GitHubCommit,
 } from "./github";
 import { rebuildAffectedRecords } from "./records";
 
@@ -165,6 +166,21 @@ export function initialSince(repository: RepositoryRow): string {
   );
 }
 
+export function isStorableCommit(commit: GitHubCommit): boolean {
+  // A merge commit records a merge rather than a change. The commits it brings
+  // in are already reachable on the default branch and carry the actual work,
+  // so keeping it only inflates counts and adds noise to the summaries.
+  if (commit.parents.length > 1) {
+    return false;
+  }
+  const committedAt =
+    commit.commit.committer?.date ?? commit.commit.author?.date;
+  if (!committedAt) {
+    throw new Error(`Commit ${commit.sha} has no timestamp.`);
+  }
+  return Date.parse(committedAt) >= DATA_CUTOFF_MS;
+}
+
 export async function syncRepository(
   env: Env,
   message: Extract<QueueMessage, { type: "sync-repository" }>,
@@ -185,14 +201,7 @@ export async function syncRepository(
     pageNumber,
   );
   const now = new Date().toISOString();
-  const commits = page.commits.filter((commit) => {
-    const committedAt =
-      commit.commit.committer?.date ?? commit.commit.author?.date;
-    if (!committedAt) {
-      throw new Error(`Commit ${commit.sha} has no timestamp.`);
-    }
-    return Date.parse(committedAt) >= DATA_CUTOFF_MS;
-  });
+  const commits = page.commits.filter(isStorableCommit);
   const statements = commits.map((commit) => {
     const { headline, body } = splitCommitMessage(commit.commit.message);
     const committedAt =
