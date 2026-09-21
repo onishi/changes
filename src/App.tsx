@@ -228,7 +228,9 @@ function ActivityGraph({
   // recent weeks rather than on the oldest ones.
   useEffect(() => {
     const element = scroller.current;
-    if (element) element.scrollLeft = element.scrollWidth;
+    if (element) {
+      element.scrollLeft = Math.max(0, element.scrollWidth - element.clientWidth);
+    }
   }, [grid]);
 
   return (
@@ -1189,8 +1191,17 @@ export function App() {
       sameOrigin: url ? url.origin === window.location.origin : false,
     });
     if (!navigable || !url) return;
+    const targetPath = `${url.pathname}${url.search}`;
+    const currentPath = `${window.location.pathname}${window.location.search}`;
+    if (url.hash && targetPath === currentPath) return;
+    if (
+      buildPath(parseRoute({ pathname: url.pathname, search: url.search })) !==
+      targetPath
+    ) {
+      return;
+    }
     event.preventDefault();
-    navigate(`${url.pathname}${url.search}`);
+    navigate(targetPath);
   };
 
   return (
