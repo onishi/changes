@@ -1058,8 +1058,7 @@ export function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
-        return;
+      if (event.altKey || event.ctrlKey || event.metaKey) return;
       const target = event.target;
       if (
         target instanceof Element &&

@@ -3,7 +3,7 @@
  * 沿ったレスポンスを返す。仕様: https://github.com/onishi/monitor/blob/main/SPEC.md#22
  *
  * - web: D1への疎通確認
- * - batch: 30分毎のsync-owner/sync-repository/summary Cron Trigger（sync_runsテーブル）
+ * - batch: 30分毎のsync-owner Cron Trigger（sync_runsテーブル）
  */
 
 interface LatestRunRow {
@@ -19,6 +19,7 @@ interface LatestSuccessRow {
 
 const BATCH_EXPECTED_INTERVAL_SEC = 1800;
 const BATCH_RUNNING_TIMEOUT_MS = BATCH_EXPECTED_INTERVAL_SEC * 1000;
+const MONITORED_SYNC_RUN_JOB_TYPE = "sync-owner";
 
 export async function checkHealth(env: Env): Promise<Response> {
   const now = new Date().toISOString();
@@ -44,11 +45,15 @@ export async function checkHealth(env: Env): Promise<Response> {
   try {
     const [latest, latestSuccess] = await Promise.all([
       env.DB.prepare(
-        "SELECT status, started_at, completed_at, error_message FROM sync_runs ORDER BY started_at DESC LIMIT 1",
-      ).first<LatestRunRow>(),
+        "SELECT status, started_at, completed_at, error_message FROM sync_runs WHERE job_type = ? ORDER BY started_at DESC LIMIT 1",
+      )
+        .bind(MONITORED_SYNC_RUN_JOB_TYPE)
+        .first<LatestRunRow>(),
       env.DB.prepare(
-        "SELECT completed_at FROM sync_runs WHERE status = 'succeeded' ORDER BY started_at DESC LIMIT 1",
-      ).first<LatestSuccessRow>(),
+        "SELECT completed_at FROM sync_runs WHERE job_type = ? AND status = 'succeeded' ORDER BY started_at DESC LIMIT 1",
+      )
+        .bind(MONITORED_SYNC_RUN_JOB_TYPE)
+        .first<LatestSuccessRow>(),
     ]);
 
     if (latestSuccess?.completed_at) {

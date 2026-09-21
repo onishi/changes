@@ -29,6 +29,13 @@ describe("monitor health", () => {
     )
       .bind(runningStartedAt)
       .run();
+    await env.DB.prepare(
+      `INSERT INTO sync_runs (
+         id, job_type, status, repositories_seen, commits_seen, started_at, completed_at, error_message
+       ) VALUES ('run_3', 'generate-summary', 'succeeded', 0, 0, ?, ?, NULL)`,
+    )
+      .bind(new Date(now - 5 * 60 * 1000).toISOString(), new Date(now).toISOString())
+      .run();
 
     const response = await checkHealth(testEnv());
     const body = (await response.json()) as {
