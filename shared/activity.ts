@@ -7,6 +7,8 @@ import {
 export const ACTIVITY_WEEKS = 53;
 export const DAYS_PER_WEEK = 7;
 export const ACTIVITY_LEVELS = 4;
+// The square the favicon draws: seven columns of seven days, ending today.
+export const ACTIVITY_SQUARE_SIZE = 7;
 
 export interface ActivityRange {
   startKey: string;
@@ -149,4 +151,46 @@ export function activityMonthStarts(weeks: ActivityWeek[]): (string | null)[] {
     previousMonth = month;
     return firstDay;
   });
+}
+
+// The last size * size days, ending today. Unlike the graph, this square is
+// not aligned to calendar weeks: it is a full block of days with no padding,
+// so every cell of the favicon carries a day.
+export function activitySquareRange(
+  todayKey: string,
+  size = ACTIVITY_SQUARE_SIZE,
+): ActivityRange {
+  return {
+    startKey: shiftDayKey(todayKey, -(size * size - 1)),
+    endKey: todayKey,
+  };
+}
+
+// Columns run oldest to newest, and each column runs oldest to newest top to
+// bottom, so today sits in the bottom right corner.
+export function buildActivitySquare(
+  range: ActivityRange,
+  commitCountsByDay: Map<string, number>,
+  size = ACTIVITY_SQUARE_SIZE,
+): ActivityCell[][] {
+  const days: { date: string; commitCount: number }[] = [];
+  let maxCommitCount = 0;
+  for (let offset = 0; offset < size * size; offset += 1) {
+    const date = shiftDayKey(range.startKey, offset);
+    const commitCount = commitCountsByDay.get(date) ?? 0;
+    maxCommitCount = Math.max(maxCommitCount, commitCount);
+    days.push({ date, commitCount });
+  }
+
+  const columns: ActivityCell[][] = [];
+  for (let column = 0; column < size; column += 1) {
+    columns.push(
+      days.slice(column * size, (column + 1) * size).map((day) => ({
+        date: day.date,
+        commitCount: day.commitCount,
+        level: activityLevel(day.commitCount, maxCommitCount),
+      })),
+    );
+  }
+  return columns;
 }

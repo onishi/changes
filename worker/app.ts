@@ -8,6 +8,7 @@ import {
 } from "./auth";
 import {
   getDailyActivity,
+  getFaviconActivity,
   getLatestDailyRecords,
   getPeriodRecords,
   getRecordCommits,
@@ -17,6 +18,7 @@ import type { QueueMessage, Scope, SessionRow } from "./domain";
 import { randomToken } from "./lib/crypto";
 import { isPeriodType } from "./records";
 import { serveBootstrappedShell } from "./bootstrap";
+import { renderActivityFavicon } from "./favicon";
 import { checkHealth } from "./monitor-health";
 
 type AppBindings = {
@@ -193,6 +195,21 @@ app.get("/api/all/latest-daily", (context) =>
 app.get("/api/all/repositories/:repo/latest-daily", (context) =>
   latestDailyResponse(context, "all", context.req.param("repo")),
 );
+// The last seven weeks of public commits, drawn as the square the browser
+// shows in the tab.
+app.get("/favicon.png", async (context) => {
+  const square = await getFaviconActivity({ env: context.env });
+  const png = await renderActivityFavicon(
+    square.map((column) => column.map((day) => day.level)),
+  );
+  return new Response(png, {
+    headers: {
+      "Content-Type": "image/png",
+      "Cache-Control": "public, max-age=300, s-maxage=1800",
+    },
+  });
+});
+
 app.get("/api/public/activity", (context) =>
   activityResponse(context, "public"),
 );

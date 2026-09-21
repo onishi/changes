@@ -17,7 +17,13 @@ import {
   shiftPeriodKey,
 } from "./lib/time";
 import { createCommitLogUrl } from "./records";
-import { activityRange } from "../shared/activity";
+import {
+  ACTIVITY_SQUARE_SIZE,
+  activityRange,
+  activitySquareRange,
+  buildActivitySquare,
+  type ActivityCell,
+} from "../shared/activity";
 import type {
   ActivityResponse,
   ChangeRecord,
@@ -222,6 +228,58 @@ export async function getLatestDailyRecords(options: {
   };
 }
 
+interface DailyCommitCountRow {
+  date: string;
+  commit_count: number;
+}
+
+// Sums the daily change records over a range of day keys, which is what both
+// the activity graph and the favicon draw.
+async function dailyCommitCounts(options: {
+  env: Env;
+  scope: Scope;
+  startKey: string;
+  endKey: string;
+  repositoryId?: string;
+}): Promise<DailyCommitCountRow[]> {
+  const conditions = [
+    "cr.scope = ?",
+    "cr.period_type = 'daily'",
+    "cr.period_start >= ?",
+    "cr.period_start < ?",
+    "cr.period_start >= ?",
+    "r.deleted_at IS NULL",
+  ];
+  const bindings: string[] = [
+    options.scope,
+    periodBoundsForRoute("daily", options.startKey).start,
+    periodBoundsForRoute("daily", options.endKey).endExclusive,
+    DATA_CUTOFF_INSTANT,
+  ];
+  if (options.scope === "public") {
+    conditions.push("r.visibility = 'public'");
+  }
+  if (options.repositoryId) {
+    conditions.push("cr.repository_id = ?");
+    bindings.push(options.repositoryId);
+  }
+
+  // One row per day across every repository in scope: the daily change
+  // records already hold the per-repository counts to sum up.
+  const result = await options.env.DB.prepare(
+    `SELECT cr.period_key AS date, SUM(cr.commit_count) AS commit_count
+       FROM change_records cr
+       JOIN repositories r ON r.id = cr.repository_id
+      WHERE ${conditions.join(" AND ")}
+      GROUP BY cr.period_key
+      HAVING SUM(cr.commit_count) > 0
+      ORDER BY cr.period_key ASC`,
+  )
+    .bind(...bindings)
+    .all<DailyCommitCountRow>();
+  return result.results;
+}
+
 export async function getDailyActivity(options: {
   env: Env;
   scope: Scope;
@@ -231,8 +289,6 @@ export async function getDailyActivity(options: {
 }): Promise<ActivityResponse> {
   const todayKey = currentPeriodKey("daily", options.now);
   const range = activityRange(todayKey, options.weeks);
-  const start = periodBoundsForRoute("daily", range.startKey).start;
-  const endExclusive = periodBoundsForRoute("daily", range.endKey).endExclusive;
   const repository = options.repositoryName
     ? await findRepository(
         options.env.DB,
@@ -245,52 +301,47 @@ export async function getDailyActivity(options: {
     throw new Error("Repository not found.");
   }
 
-  const conditions = [
-    "cr.scope = ?",
-    "cr.period_type = 'daily'",
-    "cr.period_start >= ?",
-    "cr.period_start < ?",
-    "cr.period_start >= ?",
-    "r.deleted_at IS NULL",
-  ];
-  const bindings: string[] = [
-    options.scope,
-    start,
-    endExclusive,
-    DATA_CUTOFF_INSTANT,
-  ];
-  if (options.scope === "public") {
-    conditions.push("r.visibility = 'public'");
-  }
-  if (repository) {
-    conditions.push("cr.repository_id = ?");
-    bindings.push(repository.id);
-  }
-
-  // One row per day across every repository in scope: the daily change
-  // records already hold the per-repository counts the graph sums up.
-  const result = await options.env.DB.prepare(
-    `SELECT cr.period_key AS date, SUM(cr.commit_count) AS commit_count
-       FROM change_records cr
-       JOIN repositories r ON r.id = cr.repository_id
-      WHERE ${conditions.join(" AND ")}
-      GROUP BY cr.period_key
-      HAVING SUM(cr.commit_count) > 0
-      ORDER BY cr.period_key ASC`,
-  )
-    .bind(...bindings)
-    .all<{ date: string; commit_count: number }>();
+  const days = await dailyCommitCounts({
+    env: options.env,
+    scope: options.scope,
+    startKey: range.startKey,
+    endKey: range.endKey,
+    repositoryId: repository?.id,
+  });
 
   return {
     scope: options.scope,
     repository: repository ? repository.name : null,
     start: range.startKey,
     end: range.endKey,
-    days: result.results.map((row) => ({
+    days: days.map((row) => ({
       date: row.date,
       commitCount: row.commit_count,
     })),
   };
+}
+
+// The favicon is always public: it is served to anyone who opens a tab, and
+// caches far from this worker, so private commits must never reach it.
+export async function getFaviconActivity(options: {
+  env: Env;
+  now?: Date;
+}): Promise<ActivityCell[][]> {
+  const range = activitySquareRange(
+    currentPeriodKey("daily", options.now),
+    ACTIVITY_SQUARE_SIZE,
+  );
+  const days = await dailyCommitCounts({
+    env: options.env,
+    scope: "public",
+    startKey: range.startKey,
+    endKey: range.endKey,
+  });
+  return buildActivitySquare(
+    range,
+    new Map(days.map((row) => [row.date, row.commit_count])),
+    ACTIVITY_SQUARE_SIZE,
+  );
 }
 
 export async function getPeriodRecords(options: {

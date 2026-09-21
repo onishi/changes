@@ -10,6 +10,7 @@
     "run_worker_first": [
       "/api/*",
       "/_monitor/*",
+      "/favicon.png",
       "/",
       "/public",
       "/public/*",
@@ -87,6 +88,7 @@
         "run_worker_first": [
           "/api/*",
           "/_monitor/*",
+          "/favicon.png",
           "/",
           "/public",
           "/public/*",

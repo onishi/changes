@@ -100,11 +100,13 @@
   --line: #d8d1c3;
   --accent: #d55232;
   --green: #275d47;
-  --activity-level-0: #e6e0d3;
-  --activity-level-1: color-mix(in srgb, var(--green) 22%, var(--paper));
-  --activity-level-2: color-mix(in srgb, var(--green) 45%, var(--paper));
-  --activity-level-3: color-mix(in srgb, var(--green) 72%, var(--paper));
-  --activity-level-4: var(--green);
+  /* --green blended into --paper at 22%, 45%, 72% and 100%. Written out so
+     the favicon renderer (worker/favicon.ts) can paint the same shades. */
+  --activity-level-0: rgb(230, 224, 211);
+  --activity-level-1: rgb(199, 208, 196);
+  --activity-level-2: rgb(152, 174, 159);
+  --activity-level-3: rgb(96, 134, 116);
+  --activity-level-4: rgb(39, 93, 71);
 }
 
 * {

@@ -8,6 +8,7 @@ import type {
 import { app } from "../worker/app";
 import { serializeBootstrap } from "../worker/bootstrap";
 import { hmacSha256 } from "../worker/lib/crypto";
+import { decodePng, faviconCellCenter } from "./png";
 
 const shell = `<!doctype html><html><head><title>changes</title></head><body><div id="root"></div><script type="module" src="/assets/index.js"></script></body></html>`;
 
@@ -495,6 +496,49 @@ describe("HTTP access boundaries", () => {
     expect(authenticated.headers.get("Cache-Control")).toBe(
       "private, no-store",
     );
+  });
+
+  it("draws the last seven weeks of public commits as the favicon", async () => {
+    await insertPublicRepository();
+    await insertDailyRecord({
+      repositoryId: "repo_public",
+      periodKey: tokyoDayKey(),
+      commitCount: 5,
+    });
+
+    const response = await app.request("/favicon.png", {}, testEnv());
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("image/png");
+    expect(response.headers.get("Cache-Control")).toContain("public");
+
+    const image = await decodePng(new Uint8Array(await response.arrayBuffer()));
+    expect(image.width).toBe(512);
+    // Today is the only day with commits, so it is the darkest shade and it
+    // sits in the bottom right corner of the square.
+    expect(image.pixel(...faviconCellCenter(6, 6))).toEqual([39, 93, 71]);
+    expect(image.pixel(...faviconCellCenter(0, 0))).toEqual([230, 224, 211]);
+  });
+
+  it("keeps private commits out of the favicon", async () => {
+    await insertRepository({
+      id: "repo_private",
+      name: "secret",
+      githubUpdatedAt: "2026-08-25T00:00:00.000Z",
+    });
+    await env.DB.prepare(
+      "UPDATE repositories SET visibility = 'private' WHERE id = 'repo_private'",
+    ).run();
+    await insertDailyRecord({
+      repositoryId: "repo_private",
+      periodKey: tokyoDayKey(),
+      commitCount: 9,
+      scope: "all",
+    });
+
+    const response = await app.request("/favicon.png", {}, testEnv());
+    const image = await decodePng(new Uint8Array(await response.arrayBuffer()));
+    // Nothing public happened, so every day stays empty.
+    expect(image.pixel(...faviconCellCenter(6, 6))).toEqual([230, 224, 211]);
   });
 
   it("embeds period data and canonicalizes old page routes", async () => {
