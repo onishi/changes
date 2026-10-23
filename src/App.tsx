@@ -230,7 +230,10 @@ function ActivityGraph({
   useEffect(() => {
     const element = scroller.current;
     if (element) {
-      element.scrollLeft = Math.max(0, element.scrollWidth - element.clientWidth);
+      element.scrollLeft = Math.max(
+        0,
+        element.scrollWidth - element.clientWidth,
+      );
     }
   }, [grid]);
 
@@ -1197,7 +1200,9 @@ export function App() {
     if (url.hash && targetPath === currentPath) return;
     if (!isAppPath(url.pathname)) return;
     event.preventDefault();
-    navigate(buildPath(parseRoute({ pathname: url.pathname, search: url.search })));
+    navigate(
+      buildPath(parseRoute({ pathname: url.pathname, search: url.search })),
+    );
   };
 
   return (
