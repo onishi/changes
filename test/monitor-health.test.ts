@@ -34,20 +34,21 @@ describe("monitor health", () => {
          id, job_type, status, repositories_seen, commits_seen, started_at, completed_at, error_message
        ) VALUES ('run_3', 'generate-summary', 'succeeded', 0, 0, ?, ?, NULL)`,
     )
-      .bind(new Date(now - 5 * 60 * 1000).toISOString(), new Date(now).toISOString())
+      .bind(
+        new Date(now - 5 * 60 * 1000).toISOString(),
+        new Date(now).toISOString(),
+      )
       .run();
 
     const response = await checkHealth(testEnv());
-    const body = (await response.json()) as {
+    const body = await response.json<{
       status: string;
       checks: Array<{ id: string; status: string; message: string }>;
-    };
+    }>();
 
     const batch = body.checks.find((check) => check.id === "sync-batch");
-    expect(batch).toMatchObject({
-      status: "warning",
-      message: expect.stringContaining("30分以上経過"),
-    });
+    expect(batch?.status).toBe("warning");
+    expect(batch?.message).toContain("30分以上経過");
     expect(body.status).toBe("warning");
   });
 });
